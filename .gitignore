@@ -1,0 +1,9 @@
+# Private dataset
+convers/*
+data_neuro/*
+# Ignore public software
+MarsaTag/*
+SPPAS/*
+visbrain/*
+# OSX files
+*.DS_Store
