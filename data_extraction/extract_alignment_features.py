@@ -195,7 +195,7 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
             # extract conversation 
             fp_in = os.path.join(input_folder, f) # file full path
             df = create_conversation(fp_in, fp_in.replace('conversant', 'participant'), minimum_length=0., remove_laughter=remove_laughter)
-            d = {'locutor':sub, 'block':block, 'conv': conv, 'it':nb }
+            d = {'file':f.replace('-conversant.TextGrid',''), 'locutor':sub, 'block':block, 'conv': conv, 'it':nb }
             d['Trial'] = 3*(d['block']-1)+(d['it']-1)//2
             try:
                 # for scc
@@ -211,6 +211,9 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     counters = {k:v for c in counters for k,v in c.items()}
                     lilla = len(counters) / (len(prime_voc)*len(target_voc)) # fonction existence 
                     d['lilla'] = lilla
+                    d['prime_contentw'] = len(prime_voc)
+                    d['target_contentw'] = len(target_voc)
+                    d['log_lilla'] = np.log(lilla)
                     # SILLA
                     #counters, prime_syn, target_syn = extract_syntax_count(vc)
                     #counters = {k:v for c in counters for k,v in c.items()}
@@ -238,13 +241,13 @@ if __name__ == '__main__':
     parser.add_argument('--convers_folder', '-i', type=str, default='convers/head/Transcriptions')
     parser.add_argument('--minimum_length', '-ml', type=float, default=0.) # for textgrid analysis
     parser.add_argument('primes', nargs='+', type=str) # ['conversant', 'participant']
-    parser.add_argument('--output_file', '-o', type=str, default='data/extracted_data.xlsx')
+    parser.add_argument('--output_file', '-o', type=str, default='data/extracted_align_data.xlsx')
     args = parser.parse_args()
     p = folder_analysis(args.convers_folder, args.marsa_folder, args.primes, minimum_length=args.minimum_length)
     
     # reorder columns
-    ordered_columns=['file','locutor', 'block', 'conv', 'it', 'conv_id_unif', 'prime']
+    ordered_columns=['file','locutor', 'block', 'conv', 'it', 'Trial', 'prime']
     removed_columns=['data', 'extract_text']
     other_columns=sorted(list(set(p.columns) - set(ordered_columns) - set(removed_columns)))
     # write to file
-    p[ordered_columns + other_columns + ['extract_text']].to_excel(args.output_file, index=False, header=True)
+    p[ordered_columns + other_columns].to_excel(args.output_file, index=False, header=True)
