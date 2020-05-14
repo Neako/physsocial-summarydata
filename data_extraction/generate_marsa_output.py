@@ -58,7 +58,6 @@ def folder_analysis(input_folder, output_folder):
             try:
                 fp_out = os.path.join(output_folder, f.replace('.TextGrid', '.xml'))
                 if not output_folder in l: # os.walk list all files in subfolders
-                    print('here', CURRENTDIR)
                     os.makedirs(output_folder)
                 if f.replace('.TextGrid', '.xml') not in os.listdir(output_folder):
                     one_marsa(fp_in, output_path=fp_out)

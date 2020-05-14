@@ -7,4 +7,5 @@ SPPAS/*
 visbrain/*
 # extra files
 *.DS_Store
-marsatag-ui.log
+marsatag-ui.log*
+*__pycache__*
