@@ -94,6 +94,10 @@ g <- ggplot(merres, aes(x = data_conv, y = data_part, color=Agent)) +
             y = "VD: """+function_name+""" Part",
             color = "Agent")
 ggMarginal(g, type="density", margins = "both", groupColour = TRUE)
+
+# change names to avoid later confusion
+names(data_convprime)[names(data_convprime) == 'data_conv'] = '"""+function_name+"""' 
+names(data_partprime)[names(data_partprime) == 'data_part'] = '"""+function_name+"""'
 ```
 """
     return s
