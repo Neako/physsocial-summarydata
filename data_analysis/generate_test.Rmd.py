@@ -8,7 +8,7 @@ Plots R:
 
 Example:
 $ python data_analysis/generate_test.Rmd.py speech_rate speech_rate_mean speech_rate_min speech_rate_max -o "speech_rate.Rmd" -l "data/extracted_data.xlsx" -p True -fl "data_part ~ Agent*data_conv*Trial +(1|locutor)"
-
+$ python data_analysis/generate_test.Rmd.py lexical_richness linguistic_complexity ratio_silence_lgth sum_ipu_lgth ratio_discourse ratio_feedback ratio_filled_pause mean_ipu_lgth -o "basic_features.Rmd" -l "data/extracted_data.xlsx" -p True -n "data_neuro/Broca.txt"
 """
 
 import sys

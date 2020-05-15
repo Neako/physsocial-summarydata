@@ -13,6 +13,7 @@ import argparse
 import re
 import ast
 from collections import Counter
+import copy
 
 import spacy as sp
 
@@ -214,6 +215,7 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     d['prime_contentw'] = len(prime_voc)
                     d['target_contentw'] = len(target_voc)
                     d['log_lilla'] = np.log(lilla)
+                    d['midlog_lilla'] = len(counters) / np.log(len(prime_voc)*len(target_voc))
                     # SILLA
                     #counters, prime_syn, target_syn = extract_syntax_count(vc)
                     #counters = {k:v for c in counters for k,v in c.items()}
@@ -227,10 +229,10 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     d['scc_lex'] = scc_lex
                     
                     # appending to df
-                    p.append(d)
+                    p.append(copy.deepcopy(d)) # shallow copy not enough
             except:
                 print(f)
-        
+
     return pd.DataFrame(p)
 
 
@@ -243,6 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('primes', nargs='+', type=str) # ['conversant', 'participant']
     parser.add_argument('--output_file', '-o', type=str, default='data/extracted_align_data.xlsx')
     args = parser.parse_args()
+    print(args)
     p = folder_analysis(args.convers_folder, args.marsa_folder, args.primes, minimum_length=args.minimum_length)
     
     # reorder columns
