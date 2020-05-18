@@ -6,7 +6,7 @@ Extracting
 * feedbacks, discourse, filled_pause
 
 Execution:
-$ python data_extraction/extract_basic_features.py lexical_richness linguistic_complexity extract_text extract_sentiment extract_subjectivity -m 'convers/marsatag'
+$ python data_extraction/extract_basic_features.py lexical_richness linguistic_complexity extract_text extract_sentiment extract_subjectivity content_complexity -m 'convers/marsatag'
 """
 
 from utils import *
@@ -31,6 +31,12 @@ def lexical_richness(df):
 
 def linguistic_complexity(df):
     return df[(df.pos == 'CONJ') | (df.pos == 'PREP') | (df.pos == 'PRON')].shape[0] / df.shape[0]
+
+def content_complexity(df):
+    remove_lemmas = {'aux':["avoir", "aller", "devoir", "pouvoir", "venir", "vouloir", "savoir", "faire", "falloir"], 
+                    'etat':["être", "devenir", "paraître", "sembler", "ressembler", "rester", "apparaître", "tomber", "vivre"] }
+    exceptions = [y for x in remove_lemmas.values() for y in x]
+    return df[(df.pos == 'NOUN') | (df.pos == 'ADJ') | ((df.pos == 'VERB') & (~df.lemma.isin(exceptions)))].shape[0] / df.shape[0]
 
 def ipu_length(df):
     # Cannot be used with MarsaTag Output
@@ -232,6 +238,9 @@ def folder_analysis(input_folder, marsa_folder, cplx_functions,
                     d['speech_rate_min'] = (data.apply(lambda x: (count_syllables(x.label))/x.duration if re.search(j,x.label) is not None else None, axis=1)).min()
                     d['speech_rate_max'] = (data.apply(lambda x: (count_syllables(x.label))/x.duration if re.search(j,x.label) is not None else None, axis=1)).max()
                     d['speech_rate_2'] = (data.label.apply(lambda x: count_syllables(x) if re.search(j,x) is not None else None)).sum()/(data.apply(lambda x: x.duration if re.search(j,x.label) is not None else None, axis=1)).sum()
+                    # tmp
+                    tmp = (data.apply(lambda x: x.duration if count_syllables(x.label) >= 4 else None, axis=1)).sum()
+                    d['speech_rate_min4'] = (data.label.apply(lambda x: count_syllables(x) if count_syllables(x) >= 4 else None)).sum()/tmp if tmp > 0 else 0
             p.append(d)
             d['data'] = p_analysis
             s[f] = d

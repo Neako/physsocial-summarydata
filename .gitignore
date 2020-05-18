@@ -5,6 +5,8 @@ data_neuro/*
 MarsaTag/*
 SPPAS/*
 visbrain/*
+# Ignore extracted data
+data/extracted*
 # extra files
 *.DS_Store
 marsatag-ui.log*

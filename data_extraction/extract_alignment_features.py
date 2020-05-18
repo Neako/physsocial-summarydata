@@ -146,7 +146,9 @@ def compute_scc_voc(prime_text, target_text, keep_POS = None, n=10, exceptions=[
     scc = 0
     if keep_POS is not None:
         prime_text = prime_text[prime_text.pos.isin(keep_POS)]
+        prime_text_2 = prime_text[(~prime_text.lemma.isin(exceptions))]
         target_text = target_text[target_text.pos.isin(keep_POS)]
+        target_text_2 = target_text[(~target_text.lemma.isin(exceptions))]
     # defaults: sort = True, ascending = False / transforming to DF to apply rank for computation
     most_frequent_words = list(pd.concat([prime_text, target_text]).lemma.value_counts().index)[:n]
     prime_rank = prime_text.lemma.value_counts().to_frame()
@@ -161,8 +163,10 @@ def compute_scc_voc(prime_text, target_text, keep_POS = None, n=10, exceptions=[
             scc += (prime_rank.rk[word] - target_rank.shape[0])**2
         else:
             scc += (prime_rank.rk[word] - target_rank.rk[word])**2
-    # compute scc
-    return 1 - 6*scc/(n*(n**2-1))
+    # compute and return scc
+    prime_text_2.lemma = prime_text_2.apply(lambda x: x.lemma if x.lemma is not None else x.form, axis=1)
+    target_text_2.lemma = target_text_2.apply(lambda x: x.lemma if x.lemma is not None else x.form, axis=1)
+    return 1 - 6*scc/(n*(n**2-1)), set(prime_text_2.lemma.values), set(target_text_2.lemma.values)
 
 ###### WRAP 
 def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participant'],
@@ -225,9 +229,19 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     # RepetitionDecay
                     # SCC
                     other = 'participant' if prime == 'conversant' else 'conversant'
-                    scc_lex = compute_scc_voc(anl[prime], anl[other], keep_POS = ['NOUN', 'ADJ', 'VERB'], n=10)
+                    scc_lex, pl, tl = compute_scc_voc(anl[prime], anl[other], keep_POS = ['NOUN', 'ADJ', 'VERB'], n=10)
                     d['scc_lex'] = scc_lex
-                    
+                    d['prime_lemmas'] = ' '.join(sorted(list(pl)))
+                    d['target_lemmas'] = ' '.join(sorted(list(tl)))
+                    d['common_lemmas'] = ' '.join(sorted(list((pl|tl) - (pl-tl) - (tl-pl))))
+                    d['target_only_lemmas'] = ' '.join(sorted(list((tl-pl))))
+                    d['prime_only_lemmas'] = ' '.join(sorted(list((pl-tl))))
+                    d['len_pl'] = len(list(pl))
+                    d['len_tl'] = len(list(tl))
+                    d['len_cl'] = len(list((pl|tl) - (pl-tl) - (tl-pl)))
+                    d['len_pol'] = len(list((tl-pl)))
+                    d['len_tol'] = len(list((pl-tl)))
+
                     # appending to df
                     p.append(copy.deepcopy(d)) # shallow copy not enough
             except:
