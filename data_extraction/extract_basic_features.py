@@ -64,6 +64,7 @@ LAUGHTER = [u'@',u'@@']
 MAIN_FEEDBACK_ITEMS = [u"mh",u"ouais",u"oui",u'non',u'ah',u"mouais"]+ OK_FORMS + VOILA_FORMS + DACCORD_FORMS + LAUGHTER_FORMS
 MAIN_DISCOURSE_ITEMS = [u"alors",u"mais",u"donc",u'et',u'puis',u'enfin',u'parceque',u'parcequ',u'ensuite']
 MAIN_PARTICLES_ITEMS = [u"quoi",u"hein",u"bon",u'mais',u'ben',u'beh',u'enfin',u'vois',u'putain',u'bref']
+
 def count_terms(s:str, item_list:list):
     q = 0
     for it in item_list:
@@ -214,6 +215,9 @@ def folder_analysis(input_folder, marsa_folder, cplx_functions,
                 d['qt_filled_pause'] = count_terms(sp, FILLED_PAUSE_ITEMS)
                 for col in ['qt_discourse', 'qt_feedback', 'qt_filled_pause']:
                     d[col.replace('qt', 'ratio')] = d[col] / d['nb_tokens']
+                d['nratio_feedback'] = data.label.apply(lambda x: int(count_terms(x.split(' ')[0], MAIN_FEEDBACK_ITEMS) > 0)).sum() / data.shape[0]
+                d['nratio_discourse'] = data.label.apply(lambda x: int(count_terms(x, MAIN_DISCOURSE_ITEMS) > 0)).sum() / data.shape[0]
+                d['nratio_filled_pause'] = data.label.apply(lambda x: int(count_terms(x, FILLED_PAUSE_ITEMS) > 0)).sum() / data.shape[0]
             if speech_rate:
                 d['count_syllables'] = count_syllables(d['extract_text'])
                 d['speech_rate'] = d['count_syllables']/d['sum_ipu_lgth']
