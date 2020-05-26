@@ -239,8 +239,8 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     d['len_pl'] = len(list(pl))
                     d['len_tl'] = len(list(tl))
                     d['len_cl'] = len(list((pl|tl) - (pl-tl) - (tl-pl)))
-                    d['len_pol'] = len(list((tl-pl)))
-                    d['len_tol'] = len(list((pl-tl)))
+                    d['len_tol'] = len(list((tl-pl)))
+                    d['len_pol'] = len(list((pl-tl)))
 
                     # appending to df
                     p.append(copy.deepcopy(d)) # shallow copy not enough
