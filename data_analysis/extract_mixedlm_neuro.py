@@ -4,6 +4,10 @@ Original code: _ipynb/test_neuro.ipynb
 Execute:
 $ python data_analysis/extract_mixedlm_neuro.py sum_ipu_lgth lexical_richness -s 'data/' -o 'data/pvalues.xlsx' -i 'data_analysis/_img'
 $ python data_analysis/extract_mixedlm_neuro.py sum_ipu_lgth lexical_richness -s 'data/' -o 'data/pvalues.xlsx' -e True
+$ python data_analysis/extract_mixedlm_neuro.py sum_ipu_lgth lexical_richness speech_rate_min4 -s 'data/' -o 'data/pvalues.xlsx' -i 'data_analysis/_img' -l 'data/extracted_data.xlsx' -n 'data_neuro/Full_stats.xlsx' -r 1 4 19 23
+
+Execute for align:
+$ python data_analysis/extract_mixedlm_neuro.py lilla  -s 'data/' -o 'data/pvalues_align.xlsx' -i 'data_analysis/_img' -l 'data/extracted_align_data.xlsx' -n 'data_neuro/Full_stats.xlsx' -r 1 4 19 23 -a True
 """
 import numpy as np
 import pandas as pd
@@ -22,25 +26,69 @@ import argparse
 
 CURRENTDIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
-def load_data(ling, neuro):
+def load_data(ling, neuro, neuro_is_csv=False, ling_is_align=False):
+    """Loading data as pandas DataFrame from files (location strings) + uniformisation operations
+
+    Input:
+    -------
+    ling: str
+        path from repo root to file
+    neuro: str
+        path from repo root to file
+    neuro_is_csv: bool
+        different versions of data have different features / column names, default False: data is xlsx
+    ling_is_align: bool
+        whether to adapt the data bc of a different source, default False
+    
+    Output:
+    -------
+    results: pd.DataFrame
+        dataframe of linguistic features [locutor, tier, Trial, Agent]+[interest features]
+    datan: pd.DataFrame
+        dataframe of neuro features, shape [locutor, session, area, image, bold, Agent, Trial]
+    """
     # features
     results = pd.read_excel(os.path.join(CURRENTDIR,ling))
+    results.rename(columns={'conv_id_unif':"Trial"})
+    if ling_is_align:
+        results.rename(columns={'prime':"tier"}, inplace=True) # for treatment purposes only. 
+    results['Agent'] = results.conv.apply(lambda x: 'H' if x == 1 else 'R')
     # neuro + operations
-    datan = pd.read_csv(neuro, sep='\t', header=None, names=["area", "locutor", "session", "image", "bold", "Agent", "Trial"], skipfooter=1)
-    datan.Trial = datan.Trial - 1
-    datan.Agent = datan.Agent.apply(lambda x: x.strip()) # remove extra space
+    if neuro_is_csv:
+        datan = pd.read_csv(neuro, sep='\t', header=None, names=["area", "locutor", "session", "image", "bold", "Agent", "Trial"], skipfooter=1)
+        datan.Trial = datan.Trial - 1
+        datan.Agent = datan.Agent.apply(lambda x: x.strip()) # remove extra space
+    else: # xlsx
+        datan = pd.read_excel(os.path.join(CURRENTDIR,neuro))
+        datan.rename(columns={col:col.lower() for col in datan.columns}, inplace=True)
+        datan.rename(columns={'subj':'locutor', 'sess':'session', 'roi': 'area', 'signal':'bold', 'stat':'bold', 'agent':'Agent', 'idtrial':'Trial'}, inplace=True)
+        datan['area'] = datan.area -1
+        datan.Agent = datan.Agent.apply(lambda x: x.strip()) # remove extra space
+        datan.Trial = datan.Trial - 1
+        datan['image'] = 0 # useless either way
     # return
     return results, datan
 
-def create_df(results, datan, main_cols, int_cols):
+def create_df(results, datan, main_cols, int_cols, which_remove=[]):
+    """Reshape loaded data for GLM + remove problematic subjects
+
+    Output:
+    -------
+    merres: pd.DataFrame
+        temporary dataframe with participant / conversant features side by side
+        in case of align data: participant is "participant as prime", conv is "conversant as prime"
+    merneuro: pd.DataFrame
+        final dataframe containing all features as columns: all brain areas and all features as conv/participant
+    """
     participant = results[results.tier == 'participant'][main_cols+int_cols]
     conversant = results[results.tier == 'conversant'][main_cols+int_cols]
     # create pivot data
-    datan.area = datan.area.apply(lambda x: str(x).zfill(3))
+    datan.area = datan.area.apply(lambda x: 'area_'+str(x).zfill(3))
     pivot_datan = pd.pivot_table(datan, columns='area', values='bold', index=['locutor', 'session', 'Agent', 'Trial', 'image'], aggfunc=np.sum).reset_index()
     # create merge data
     merres = pd.merge(participant, conversant, on=main_cols, suffixes=('_part', '_conv'), validate="one_to_one")
     merneuro = pd.merge(merres, pivot_datan, on=main_cols, suffixes=('_ling', '_bold'), validate="one_to_one")
+    merneuro = merneuro[~merneuro.locutor.isin(which_remove)]
     # add diff_columns
     for c in int_cols:
         merneuro[c+'_diff'] = merneuro[c+'_part'] - merneuro[c+'_conv']
@@ -80,7 +128,7 @@ def execute_glm(merneuro, int_cols, areas):
             p_f_dic = []
             e_f_dic = []
             for ar in areas:
-                formula_1 = "{} ~ {} * Agent + Trial".format(ar, c+formula_part)
+                formula_1 = "area_{} ~ {} * Agent + Trial".format(str(ar).zfill(3), c+formula_part)
                 print(formula_1)
                 md = smf.mixedlm(formula_1, merneuro, groups=merneuro["locutor"], re_formula=re_f)
                 mdf = md.fit()
@@ -134,16 +182,21 @@ if __name__ == '__main__':
     parser.add_argument('--json_folder', '-s', type=str, default=None) # if None, Spacy is used; otherwise MarsaTag
     parser.add_argument('--linguistic_data', '-l', type=str, default='data/extracted_data.xlsx')
     parser.add_argument('--neuro_data', '-n', type=str, default='data_neuro/Full.txt')
+    parser.add_argument('--remove_subjects', '-r', type=int, nargs='+', default=[])
     parser.add_argument('--excel_output', '-o', type=str, default=None)
     parser.add_argument('--json_exists', '-e', type=bool, default=False)
+    parser.add_argument('--is_align', '-a', type=bool, default=False)
     parser.add_argument('--img_folder', '-i', type=str, default=None)
     args = parser.parse_args()
+    print(args)
 
+    if args.is_align:
+        print("\nIn the following, _part results are 'participant as prime', _conv results are 'conversant as prime'")
     # case 1: json has not been created
-    results, datan = load_data(os.path.join(CURRENTDIR, args.linguistic_data), os.path.join(CURRENTDIR, args.neuro_data))
+    results, datan = load_data(os.path.join(CURRENTDIR, args.linguistic_data), os.path.join(CURRENTDIR, args.neuro_data), neuro_is_csv=(re.search('.xlsx', args.neuro_data) is None), ling_is_align=args.is_align)
     areas = datan.area.unique()
     main_cols = ['locutor', 'Trial', 'Agent']
-    merres, merneuro = create_df(results, datan, main_cols, args.functions)
+    merres, merneuro = create_df(results, datan, main_cols, args.functions, which_remove=args.remove_subjects)
     pvalues, estimates = execute_glm(merneuro, args.functions, areas)
     if args.json_folder is not None:
         saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder))
