@@ -49,7 +49,7 @@ def load_data(ling, neuro, neuro_is_csv=False, ling_is_align=False):
     """
     # features
     results = pd.read_excel(os.path.join(CURRENTDIR,ling))
-    results.rename(columns={'conv_id_unif':"Trial"})
+    results.rename(columns={'conv_id_unif':"Trial"}, inplace=True)
     if ling_is_align:
         results.rename(columns={'prime':"tier"}, inplace=True) # for treatment purposes only. 
     results['Agent'] = results.conv.apply(lambda x: 'H' if x == 1 else 'R')
@@ -114,6 +114,9 @@ def execute_glm(merneuro, int_cols, areas):
     estimates: dict
         contains models estimates, shape {'int_col': {'formula': np.array}}
     """
+    import warnings
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning # logging errors: either ConvergenceWarning or RuntimeWarning
+    # saving in
     pvalues = {}
     estimates = {}
 
@@ -131,9 +134,16 @@ def execute_glm(merneuro, int_cols, areas):
                 formula_1 = "area_{} ~ {} * Agent + Trial".format(str(ar).zfill(3), c+formula_part)
                 print(formula_1)
                 md = smf.mixedlm(formula_1, merneuro, groups=merneuro["locutor"], re_formula=re_f)
-                mdf = md.fit()
-                p_f_dic.append(mdf.pvalues[['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]']])
-                e_f_dic.append(mdf.fe_params)
+                with warnings.catch_warnings(record=True) as w:
+                    mdf = md.fit()
+                # Add warnings to model data
+                p_to_dic = mdf.pvalues[['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]']]
+                p_to_dic['Warning'] = None if len(w) == 0 else str(w[-1].category).replace("<class '", '').replace("'>", '').split('.')[-1]
+                e_to_dic = mdf.fe_params
+                e_to_dic['Warning'] = None if len(w) == 0 else str(w[-1].category).replace("<class '", '').replace("'>", '').split('.')[-1]
+                # Add to dic
+                p_f_dic.append(p_to_dic)
+                e_f_dic.append(e_to_dic)
             p_c_dic[formula_part] = pd.DataFrame(p_f_dic)
             e_c_dic[formula_part] = pd.DataFrame(e_f_dic)
             print("\tElapsed: {0:4.2f}".format(time.time() - start_time))
@@ -151,35 +161,42 @@ def saving_as_json(pvalues, estimates, json_folder):
         json.dump({c:{f:df.values.tolist() for f, df in v.items()} for c,v in estimates.items()}, json_file)
 
 def loading_as_json(json_folder):
-    with open('pvalues.txt', 'r') as json_file:
+    with open(os.path.join(json_folder,'pvalues.txt'), 'r') as json_file:
         pvalues = json.load(json_file)
-    with open('estimates.txt', 'r') as json_file:
+    with open(os.path.join(json_folder,'estimates.txt'), 'r') as json_file:
         estimates = json.load(json_file)
     return pvalues, estimates
 
 def df_to_excel(pvalues, int_cols, excel_path):
     """Writing results to excel - can be called with pvalues or estimates dictionnary
     """
-    writer = pd.ExcelWriter('pvalues_neuro_nofilter.xlsx')
+    writer = pd.ExcelWriter(excel_path)
     for c in int_cols:
         for formula_part in ['_part', '_conv', '_diff']:
-            df = pvalues[c][formula_part].sort_values(by=c+formula_part+':Agent[T.R]', ascending=True)
+            df = pvalues[c][formula_part]
+            if not isinstance(df, pd.core.frame.DataFrame):
+                df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
+            df.sort_values(by=c+formula_part+':Agent[T.R]', ascending=True, inplace=True)
             df.to_excel(writer, sheet_name=c+formula_part)
     writer.save()
     print('Saved successfully')
 
 def img_to_file(int_cols, formulas, pvalues, img_folder):
-    for f in int_cols:
-        for form in formulas:
+    for c in int_cols:
+        for formula_part in formulas:
             plt.subplots(figsize=(30, 5))
-            sns_plot = sns.heatmap(pvalues[f][form].T)
-            sns_plot.savefig(os.path.join(img_folder, '{}_{}.png'.format(f, form)))
+            df = pvalues[c][formula_part]
+            if not isinstance(df, pd.core.frame.DataFrame):
+                df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
+                df['Warning'] = df['Warning'].apply(lambda x: 1 if x is not None else 0)
+            sns_plot = sns.heatmap(df.T)
+            sns_plot.figure.savefig(os.path.join(img_folder, '{}{}.png'.format(c, formula_part)))
 
 # main
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('functions', nargs='+', type=str)
-    parser.add_argument('--json_folder', '-s', type=str, default=None) # if None, Spacy is used; otherwise MarsaTag
+    parser.add_argument('--json_folder', '-s', type=str, default=None)
     parser.add_argument('--linguistic_data', '-l', type=str, default='data/extracted_data.xlsx')
     parser.add_argument('--neuro_data', '-n', type=str, default='data_neuro/Full.txt')
     parser.add_argument('--remove_subjects', '-r', type=int, nargs='+', default=[])
@@ -193,13 +210,14 @@ if __name__ == '__main__':
     if args.is_align:
         print("\nIn the following, _part results are 'participant as prime', _conv results are 'conversant as prime'")
     # case 1: json has not been created
-    results, datan = load_data(os.path.join(CURRENTDIR, args.linguistic_data), os.path.join(CURRENTDIR, args.neuro_data), neuro_is_csv=(re.search('.xlsx', args.neuro_data) is None), ling_is_align=args.is_align)
-    areas = datan.area.unique()
-    main_cols = ['locutor', 'Trial', 'Agent']
-    merres, merneuro = create_df(results, datan, main_cols, args.functions, which_remove=args.remove_subjects)
-    pvalues, estimates = execute_glm(merneuro, args.functions, areas)
-    if args.json_folder is not None:
-        saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder))
+    if not args.json_exists:
+        results, datan = load_data(os.path.join(CURRENTDIR, args.linguistic_data), os.path.join(CURRENTDIR, args.neuro_data), neuro_is_csv=(re.search('.xlsx', args.neuro_data) is None), ling_is_align=args.is_align)
+        areas = datan.area.unique()
+        main_cols = ['locutor', 'Trial', 'Agent']
+        merres, merneuro = create_df(results, datan, main_cols, args.functions, which_remove=args.remove_subjects)
+        pvalues, estimates = execute_glm(merneuro, args.functions, areas)
+        if args.json_folder is not None:
+            saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder))
 
     # case 2: load from json
     if args.json_exists:
