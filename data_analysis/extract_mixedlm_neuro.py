@@ -152,18 +152,18 @@ def execute_glm(merneuro, int_cols, areas):
 
     return pvalues, estimates
 
-def saving_as_json(pvalues, estimates, json_folder):
+def saving_as_json(pvalues, estimates, json_folder, name_insert=''):
     """Save pvalues and estimates to different files in json_folder for later analysis
     """
-    with open(os.path.join(json_folder,'pvalues.txt'), 'w') as json_file:
+    with open(os.path.join(json_folder,'pvalues'+name_insert+'.txt'), 'w') as json_file:
         json.dump({c:{f:df.values.tolist() for f, df in v.items()} for c,v in pvalues.items()}, json_file)
-    with open(os.path.join(json_folder,'estimates.txt'), 'w') as json_file:
+    with open(os.path.join(json_folder,'estimates'+name_insert+'.txt'), 'w') as json_file:
         json.dump({c:{f:df.values.tolist() for f, df in v.items()} for c,v in estimates.items()}, json_file)
 
-def loading_as_json(json_folder):
-    with open(os.path.join(json_folder,'pvalues.txt'), 'r') as json_file:
+def loading_as_json(json_folder, name_insert=''):
+    with open(os.path.join(json_folder,'pvalues'+name_insert+'.txt'), 'r') as json_file:
         pvalues = json.load(json_file)
-    with open(os.path.join(json_folder,'estimates.txt'), 'r') as json_file:
+    with open(os.path.join(json_folder,'estimates'+name_insert+'.txt'), 'r') as json_file:
         estimates = json.load(json_file)
     return pvalues, estimates
 
@@ -188,7 +188,7 @@ def img_to_file(int_cols, formulas, pvalues, img_folder):
             df = pvalues[c][formula_part]
             if not isinstance(df, pd.core.frame.DataFrame):
                 df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
-                df['Warning'] = df['Warning'].apply(lambda x: 1 if x is not None else 0)
+            df['Warning'] = df['Warning'].apply(lambda x: 1 if x is not None else 0)
             sns_plot = sns.heatmap(df.T)
             sns_plot.figure.savefig(os.path.join(img_folder, '{}{}.png'.format(c, formula_part)))
 
@@ -217,12 +217,12 @@ if __name__ == '__main__':
         merres, merneuro = create_df(results, datan, main_cols, args.functions, which_remove=args.remove_subjects)
         pvalues, estimates = execute_glm(merneuro, args.functions, areas)
         if args.json_folder is not None:
-            saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder))
+            saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder), name_insert=('' if not args.is_align else '_align'))
 
     # case 2: load from json
     if args.json_exists:
         try:
-            pvalues, estimates = loading_as_json(os.path.join(CURRENTDIR, args.json_folder))
+            pvalues, estimates = loading_as_json(os.path.join(CURRENTDIR, args.json_folder), name_insert=('' if not args.is_align else '_align'))
         except:
             print('JSON files do not exist!')
 

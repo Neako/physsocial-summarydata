@@ -39,13 +39,14 @@ library(ggExtra)
     s +="""```\n"""
     return s
 
-def add_data(neuro_file=None, linguistic_file=None):
+def add_data(neuro_file=None, linguistic_file=None, remove_subjects=[]):
     s = """
 ```{r}
 # linguistic data
 data <- read_excel('"""+linguistic_file+"""')
 data$Agent = ifelse(data$conv == 1,"H","R")
-data = data[which(data$locutor > 1),]
+data = data[!(data$locutor %in% c("""+','.join(remove_subjects)+""")),]
+# data = data[which(data$locutor > 1),]
 data$Trial2 = paste0('t', str_pad(data$conv_id_unif, 2, pad = "0"))
 """
     if neuro_file is not None:
@@ -144,7 +145,7 @@ ggplot(data,
 """
     return s
 
-def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro):
+def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro, remove_subjects):
     # read path to create file
     currdir = os.path.dirname(os.path.realpath(__file__)).replace('/data_analysis','')
     # Open the file with writing permission
@@ -155,7 +156,7 @@ def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formul
     rmd.write(add_libraries())
     neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
     ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
-    rmd.write(add_data(neuro_path, ling_path))
+    rmd.write(add_data(neuro_path, ling_path, remove_subjects))
     for f in functions:
         rmd.write("\n# " + f )
         if plot_distrib:
@@ -175,8 +176,9 @@ if __name__ == '__main__':
     parser.add_argument('--ling_path', '-l', type=str, default=None)
     parser.add_argument('--neuro_path', '-n', type=str, default=None)
     parser.add_argument('--plot_distrib', '-p', type=bool, default=False)
+    parser.add_argument('--remove_subjects', '-r', type=int, nargs='+', default=[])
     parser.add_argument('--formula_ling', '-fl', type=str, default="data_part ~ data_conv * Agent + Trial + (1 + Trial | locutor)")
     parser.add_argument('--formula_neuro', '-fn', type=str, default="bold ~ data_part * Agent + Trial + (1 + Trial | locutor)")
     args = parser.parse_args()
     print(args)
-    create_file(args.functions, args.file_name, args.neuro_path, args.ling_path, args.plot_distrib, args.formula_ling, args.formula_neuro)
+    create_file(args.functions, args.file_name, args.neuro_path, args.ling_path, args.plot_distrib, args.formula_ling, args.formula_neuro, args.remove_subjects)
