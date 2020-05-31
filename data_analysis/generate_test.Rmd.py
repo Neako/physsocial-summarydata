@@ -45,7 +45,7 @@ def add_data(neuro_file=None, linguistic_file=None, remove_subjects=[]):
 # linguistic data
 data <- read_excel('"""+linguistic_file+"""')
 data$Agent = ifelse(data$conv == 1,"H","R")
-data = data[!(data$locutor %in% c("""+','.join(remove_subjects)+""")),]
+data = data[!(data$locutor %in% c("""+','.join([str(x) for x in remove_subjects])+""")),]
 # data = data[which(data$locutor > 1),]
 data$Trial2 = paste0('t', str_pad(data$conv_id_unif, 2, pad = "0"))
 """
