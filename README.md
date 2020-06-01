@@ -6,3 +6,4 @@ Requirements:
 * [MarsaTag](https://www.ortolang.fr/market/tools/sldr000841) in project root
 * Spacy
 * Textblob
+* Visbrain
