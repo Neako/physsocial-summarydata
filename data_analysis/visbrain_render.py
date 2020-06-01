@@ -6,6 +6,10 @@ See https://github.com/EtienneCmb/visbrain/blob/master/visbrain/objects/scene_ob
 Execute:
 $ python data_analysis/visbrain_render.py -d data/pvalues.xlsx -f sum_ipu_lgth -c part -on interaction -p 0.001 -i 'data_analysis/_img'
 $ python data_analysis/visbrain_render.py -d data/pvalues.xlsx -p 0.001 -i 'data_analysis/_img' -v left right
+
+TODO:
+* Add parameter to take value into account
+* Add parameter to take pvalue into account when plotting estimate
 """
 import pandas as pd
 import numpy as np
@@ -121,5 +125,5 @@ if __name__ == '__main__':
             if args.img_folder is None:
                 visualise_brain(b_obj)
             else:
-                generate_img(l_file, r_file, brain_areas_select, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+args.pmax)),args.views)
+                generate_img(l_file, r_file, brain_areas_select, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views)
     
