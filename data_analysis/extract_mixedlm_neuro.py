@@ -8,6 +8,9 @@ $ python data_analysis/extract_mixedlm_neuro.py sum_ipu_lgth lexical_richness sp
 
 Execute for align:
 $ python data_analysis/extract_mixedlm_neuro.py lilla  -s 'data/' -o 'data/pvalues_align.xlsx' -i 'data_analysis/_img' -l 'data/extracted_align_data.xlsx' -n 'data_neuro/Full_stats.xlsx' -r 1 4 19 23 -a True
+
+TODO:
+* Insert metadata in JSON files (esp. removed subjects & file taken from)
 """
 import numpy as np
 import pandas as pd
@@ -23,6 +26,7 @@ import re
 import time
 import json
 import argparse
+from matplotlib.colors import PowerNorm
 
 CURRENTDIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -184,12 +188,12 @@ def df_to_excel(pvalues, int_cols, excel_path):
 def img_to_file(int_cols, formulas, pvalues, img_folder):
     for c in int_cols:
         for formula_part in formulas:
-            plt.subplots(figsize=(30, 5))
+            plt.subplots(figsize=(40, 5))
             df = pvalues[c][formula_part]
             if not isinstance(df, pd.core.frame.DataFrame):
                 df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
             df['Warning'] = df['Warning'].apply(lambda x: 1 if x is not None else 0)
-            sns_plot = sns.heatmap(df.T)
+            sns_plot = sns.heatmap(df.T, norm=PowerNorm(gamma=1./3.), cbar_kws={'ticks': [0.0, 0.01, 0.05, 0.1, 0.2, 0.5, 1.0]})
             sns_plot.figure.savefig(os.path.join(img_folder, '{}{}.png'.format(c, formula_part)))
 
 # main
