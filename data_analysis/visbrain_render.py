@@ -19,12 +19,13 @@ import os
 import argparse
 
 from visbrain.gui import Brain
-from visbrain.objects import BrainObj, SceneObj
+from visbrain.objects import BrainObj, SceneObj, ColorbarObj
 import nibabel as nib
+from vispy.visuals import transforms
 
 CURRENTDIR = os.path.dirname(os.path.realpath(__file__)).replace('/data_analysis','')
 
-def read_data(data:str, parcellation:str, feature:str, on:str, pmax:float):
+def read_data(data:str, parcellation:str, feature:str, on:str, pmax:float, is_estimate=False):
     """
     Input:
     -------
@@ -34,6 +35,13 @@ def read_data(data:str, parcellation:str, feature:str, on:str, pmax:float):
         from args, in ['agent', 'feature', 'interaction']
     pmax: float
         maximum pvalue, for area selection
+
+    Output:
+    -------
+    l_file: str
+    r_file: str
+    brain_areas: pd.DataFrame
+        dataframe of selected areas, shape ['index', 'values']
     """
     # neuro files
     l_file = os.path.join(CURRENTDIR, os.path.join(args.parcellation, "lh.BN_Atlas.annot"))
@@ -44,14 +52,31 @@ def read_data(data:str, parcellation:str, feature:str, on:str, pmax:float):
     d_on = {'agent':'Agent[T.R]', 'feature':feature, 'interaction':feature+':Agent[T.R]'}
     brain_areas = pd.read_excel(os.path.join(CURRENTDIR, args.data), sheet_name=feature, index_col=0)
     # .reset_index() # after resetting, areas are in "index"
-    brain_areas_select = list(brain_areas[brain_areas[d_on[on]] <= pmax].index)
-    # brain_areas_select = pd.DataFrame({"Name": l, "Label":l, "Activation":[1]*len(l)})
+    if is_estimate:
+        brain_areas_select = pd.read_excel(os.path.join(CURRENTDIR, args.data).replace('estimates', 'pvalues'), sheet_name=feature, index_col=0)
+        brain_areas_select = list(brain_areas_select[brain_areas_select[d_on[on]] <= pmax].index)
+        brain_areas = brain_areas[d_on[on]][brain_areas_select].reset_index().rename(columns={d_on[on]:'values'})
+    else:
+        brain_areas = brain_areas[brain_areas[d_on[on]] <= pmax][d_on[on]].reset_index().rename(columns={d_on[on]:'values'})
     # return
-    return l_file, r_file, brain_areas_select
+    return l_file, r_file, brain_areas
 
-def create_brain_obj(l_file, r_file, activated_areas, brain_name):
+def create_brain_obj(l_file, r_file, activated_areas, brain_name, cmap='copper', vmin=0., vmax=0.01):
     """Create BrainObj, add areas, and return object
 
+    Input:
+    --------
+    l_file: str
+    r_file: str
+    brain_areas: pd.DataFrame
+        dataframe of selected areas, shape ['index', 'values']
+    brain_name: str
+        parameter for the BrainObj, in ('white', 'inflated')
+    cmap: str
+        maplotlib colomap to use. For pvalues, 'copper' should be used; for estimates, 'coolwarm'.
+    clim: tuple
+        colorbar limits. For pvalues, (0,pmax) should be used; for estimates, a symetrical interval.
+    
     Output:
     --------
     b_obj: visbrain.objects.BrainObj
@@ -60,15 +85,13 @@ def create_brain_obj(l_file, r_file, activated_areas, brain_name):
     annot_data = b_obj.get_parcellates(l_file)
     
     # errors if missing labels - removing labels not in annot_data
-    activated_areas = list(set(activated_areas) - (set(activated_areas) - set(annot_data.index)))
-    select = annot_data['Labels'][activated_areas].tolist()
-    left_areas = [x for x in select if x[-1] == 'L']
-    right_areas = [x for x in select if x[-1] == 'R']
+    annot_select = pd.merge(annot_data.reset_index()[['index', 'Labels']], activated_areas, on=['index'], validate="one_to_one")
+    annot_select['is_left'] = annot_select['Labels'].apply(lambda x: x[-1] == 'L')
 
-    if len(left_areas) > 0:
-        b_obj.parcellize(l_file, hemisphere='left',  select=left_areas, data=np.random.shuffle(np.arange(len(left_areas))), cmap='rainbow')
-    if len(right_areas) > 0:
-        b_obj.parcellize(r_file, hemisphere='right',  select=right_areas, data=np.random.shuffle(np.arange(len(right_areas))), cmap='rainbow')
+    if annot_select[annot_select.is_left].shape[0] > 0:
+        b_obj.parcellize(l_file, hemisphere='left',  select=annot_select[annot_select.is_left]['Labels'].tolist(), data=annot_select[annot_select.is_left]['values'].tolist(), cmap=cmap, vmin=vmin, vmax=vmax, clim=(vmin, vmax))
+    if annot_select[~annot_select.is_left].shape[0] > 0:
+        b_obj.parcellize(r_file, hemisphere='right',  select=annot_select[~annot_select.is_left]['Labels'].tolist(), data=annot_select[~annot_select.is_left]['values'].tolist(), cmap=cmap, vmin=vmin, vmax=vmax, clim=(vmin, vmax))
     return b_obj
 
 def visualise_brain(b_obj):
@@ -77,30 +100,40 @@ def visualise_brain(b_obj):
     vb = Brain(brain_obj=b_obj, bgcolor='black')
     vb.show()
 
-def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views):
+def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, is_estimate=False, cmap='copper', vmin=0., vmax=0.01):
     """Generate .png and .gif animation of rotating brains
     """
     sc = SceneObj(size=(1500, 1000))
-    KW = dict(title_size=14., zoom=2.)
+    KW = dict(title_size=14., zoom=2.) # zoom not working
+    CBAR_STATE = dict(cbtxtsz=12, txtsz=10., width=.1, cbtxtsh=3., rect=(-.3, -2., 1., 4.))
     # PLOT OBJECTS
     for i,rot in enumerate(views):
         # cannot use the same object
-        sc.add_to_subplot(create_brain_obj(l_file, r_file, activated_areas, brain_name), row=i//2, col=i%2, rotate=rot, title=rot, **KW)
+        b_obj = create_brain_obj(l_file, r_file, activated_areas, brain_name, cmap=cmap, vmin=vmin, vmax=vmax)
+        sc.add_to_subplot(b_obj, row=i//2, col=i%2, rotate=rot, title=rot, **KW)
+        # Get the colorbar of the brain object and add it to the scene
+        # Identical brain ==> same colorbar
+    if is_estimate:
+        # cmap needs to be set for all objects
+        cb_parr = ColorbarObj(b_obj, cblabel='Data to parcellates', **CBAR_STATE)
+        # not working properly and can't find a way to rotate that bar
+        # sc.add_to_subplot(cb_parr, row=0, col=2, row_span=i//2+1, width_max=200) 
     # gif and png
     # sc.preview()
-    sc.record_animation(out_file + "_areas.gif")
-    sc.screenshot(saveas = out_file + "_areas.png")
+    sc.record_animation(out_file + ('_est' if is_estimate else '') + "_areas.gif")
+    sc.screenshot(saveas = out_file + ('_est' if is_estimate else '') + "_areas.png")
     return sc.render()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', '-d', type=str) # xlsx file
+    parser.add_argument('--file_type', '-t', choices=['pvalues', 'estimates'], type=str, default='pvalues') # if estimate, lookup pvalues
     parser.add_argument('--feature', '-f', type=str, default=None) # which sheet? ex: sum_ipu_lgth
     parser.add_argument('--condition', '-c', choices=['part', 'conv', 'diff'], default=None)
     parser.add_argument('--on', '-on', choices=['agent', 'feature', 'interaction'], default='agent') # Agent[T.R]
     parser.add_argument('--pmax', '-p', type=float, default=0.01) # pvalue
     parser.add_argument('--parcellation', '-n', type=str, default='data_neuro/parcellation') 
-    parser.add_argument('--img_folder', '-i', type=str, default='data_neuro/parcellation')
+    parser.add_argument('--img_folder', '-i', type=str, default=None)
     parser.add_argument('--brain', '-b', choices=['white', 'inflated'], default='white')
     parser.add_argument('--views', '-v', nargs='+', choices=['right', 'left', 'top', 'bottom', 'front', 'back'], default=['right', 'left', 'top', 'bottom', 'front', 'back'])
     args = parser.parse_args()
@@ -112,18 +145,25 @@ if __name__ == '__main__':
     else:
         features = [args.feature+'_'+args.condition]
     ons = ['agent', 'feature', 'interaction'] if args.on is None else [args.on]
+    is_estimate=(args.file_type == 'estimates')
 
     for f in features:
         for on in ons:
             print('\n{} {}'.format(f, on))
             # read files
-            l_file, r_file, brain_areas_select = read_data(args.data, args.parcellation, f, on, args.pmax)
+            l_file, r_file, brain_areas = read_data(args.data, args.parcellation, f, on, args.pmax, is_estimate=is_estimate)
             print("Activated Areas: ")
-            print(brain_areas_select)
-            b_obj = create_brain_obj(l_file, r_file, brain_areas_select, args.brain)
+            print(brain_areas['index'].tolist())
+            print()
 
+            cmap = 'copper' if not is_estimate else 'coolwarm'
+            v = max(abs(brain_areas['values'].min()), brain_areas['values'].max())
+            vmin = -1*v if is_estimate else 0
+            vmax = v
+            print(cmap, vmin, vmax)
             if args.img_folder is None:
+                b_obj = create_brain_obj(l_file, r_file, brain_areas, args.brain, cmap=cmap, vmin=vmin, vmax=vmax)
                 visualise_brain(b_obj)
             else:
-                generate_img(l_file, r_file, brain_areas_select, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views)
+                generate_img(l_file, r_file, brain_areas, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views, is_estimate=is_estimate, cmap=cmap, vmin=vmin, vmax=vmax)
     

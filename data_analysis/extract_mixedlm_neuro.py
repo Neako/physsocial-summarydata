@@ -179,7 +179,11 @@ def df_to_excel(pvalues, int_cols, excel_path):
         for formula_part in ['_part', '_conv', '_diff']:
             df = pvalues[c][formula_part]
             if not isinstance(df, pd.core.frame.DataFrame):
-                df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
+                # estimates have an extra column: "Trial"
+                try:
+                    df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
+                except:
+                    df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Trial', 'Warning'])
             df.sort_values(by=c+formula_part+':Agent[T.R]', ascending=True, inplace=True)
             df.to_excel(writer, sheet_name=c+formula_part)
     writer.save()
@@ -237,4 +241,4 @@ if __name__ == '__main__':
     # write to file
     if args.excel_output is not None:
         df_to_excel(pvalues, args.functions, os.path.join(CURRENTDIR, args.excel_output))
-        # df_to_excel(estimates, args.functions, os.path.join(CURRENTDIR, args.excel_output))
+        df_to_excel(estimates, args.functions, os.path.join(CURRENTDIR, args.excel_output).replace('pvalues', 'estimates'))
