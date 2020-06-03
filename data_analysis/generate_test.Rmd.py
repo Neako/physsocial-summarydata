@@ -9,6 +9,7 @@ Plots R:
 Example:
 $ python data_analysis/generate_test.Rmd.py speech_rate speech_rate_mean speech_rate_min speech_rate_max -o "speech_rate.Rmd" -l "data/extracted_data.xlsx" -p True -fl "data_part ~ Agent*data_conv*Trial +(1|locutor)"
 $ python data_analysis/generate_test.Rmd.py lexical_richness linguistic_complexity ratio_silence_lgth sum_ipu_lgth ratio_discourse ratio_feedback ratio_filled_pause mean_ipu_lgth -o "basic_features.Rmd" -l "data/extracted_data.xlsx" -p True -n "data_neuro/Broca.txt"
+$ python data_analysis/generate_test.Rmd.py lexical_richness linguistic_complexity ratio_silence_lgth sum_ipu_lgth nratio_discourse nratio_feedback nratio_filled_pause mean_ipu_lgth -o "basic_features_srm_2.Rmd" -l "data/extracted_data_3.xlsx" -p True -r 1 4 19 23 -ee True -eo "summary.xlsx"
 """
 
 import sys
@@ -62,7 +63,7 @@ broca$Trial = broca$Trial-1
         s += "```\n"
     return s
 
-def add_mergedata(function_name, formula_ling, formula_neuro, has_neuro=False):
+def add_mergedata(function_name, formula_ling, formula_neuro, has_neuro=False, save_data=False, is_first=False):
     s = """
 ```{r}
 # creating merged data - ling
@@ -75,8 +76,20 @@ merres = merge(temp1, temp2, by=c("locutor", "Trial", "Agent"))
 mdl = lmer('"""+formula_ling+"""', data = merres)
 print(summary(mdl))
 tab_model(mdl, title = paste("part ~ conv ", '"""+function_name+"""'))
-#print(confint(mdl))
 
+"""
+    if save_data:
+        s += """# saving data
+s = summary(mdl)[['coefficients']]
+s = data.frame(s)
+s$Feature = '"""+function_name+"""'
+l = data.frame(confint(mdl))[5:9,]
+"""
+        if is_first:
+            s += """df_overall = cbind(s,l)
+"""
+        else:
+            s += """df_overall = rbind(df_overall, cbind(s,l))
 """
     if has_neuro:
         s += """# creating merged data - neuro
@@ -145,7 +158,17 @@ ggplot(data,
 """
     return s
 
-def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro, remove_subjects):
+def print_saver(excel_output, excel_exists):
+    return """
+# Saver
+```{r}
+# Write the first data set in a new workbook
+write.xlsx(df_overall, file = '"""+excel_output+"""',
+      sheetName = "models", append = """+str(excel_exists).upper()+""")
+```
+"""
+
+def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro, remove_subjects, excel_output, excel_exists):
     # read path to create file
     currdir = os.path.dirname(os.path.realpath(__file__)).replace('/data_analysis','')
     # Open the file with writing permission
@@ -157,13 +180,16 @@ def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formul
     neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
     ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
     rmd.write(add_data(neuro_path, ling_path, remove_subjects))
-    for f in functions:
+
+    for i,f in enumerate(functions):
         rmd.write("\n# " + f )
         if plot_distrib:
             rmd.write(add_description(f))
-        rmd.write(add_mergedata(f, formula_ling, formula_neuro, has_neuro = (neuro_path is not None)))
+        rmd.write(add_mergedata(f, formula_ling, formula_neuro, has_neuro = (neuro_path is not None), save_data=(excel_output is not None), is_first=(i==0)))
         rmd.write(add_plot(f))
 
+    if excel_output is not None:
+        rmd.write(print_saver(os.path.join(currdir,os.path.join('data_analysis/_exploration',excel_output)), excel_exists))
     # Close the file
     rmd.close()
 
@@ -179,6 +205,8 @@ if __name__ == '__main__':
     parser.add_argument('--remove_subjects', '-r', type=int, nargs='+', default=[])
     parser.add_argument('--formula_ling', '-fl', type=str, default="data_part ~ data_conv * Agent + Trial + (1 + Trial | locutor)")
     parser.add_argument('--formula_neuro', '-fn', type=str, default="bold ~ data_part * Agent + Trial + (1 + Trial | locutor)")
+    parser.add_argument('--excel_output', '-eo', type=str, default=None)
+    parser.add_argument('--excel_exists', '-ee', type=bool, default=False)
     args = parser.parse_args()
     print(args)
-    create_file(args.functions, args.file_name, args.neuro_path, args.ling_path, args.plot_distrib, args.formula_ling, args.formula_neuro, args.remove_subjects)
+    create_file(args.functions, args.file_name, args.neuro_path, args.ling_path, args.plot_distrib, args.formula_ling, args.formula_neuro, args.remove_subjects, args.excel_output, args.excel_exists)

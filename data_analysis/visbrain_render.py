@@ -100,7 +100,7 @@ def visualise_brain(b_obj):
     vb = Brain(brain_obj=b_obj, bgcolor='black')
     vb.show()
 
-def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, is_estimate=False, cmap='copper', vmin=0., vmax=0.01):
+def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, is_estimate=False, cmap='copper', vmin=0., vmax=0.01, save_gif=False):
     """Generate .png and .gif animation of rotating brains
     """
     sc = SceneObj(size=(1500, 1000))
@@ -120,7 +120,8 @@ def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, i
         # sc.add_to_subplot(cb_parr, row=0, col=2, row_span=i//2+1, width_max=200) 
     # gif and png
     # sc.preview()
-    sc.record_animation(out_file + ('_est' if is_estimate else '') + "_areas.gif")
+    if save_gif:
+        sc.record_animation(out_file + ('_est' if is_estimate else '') + "_areas.gif")
     sc.screenshot(saveas = out_file + ('_est' if is_estimate else '') + "_areas.png")
     return sc.render()
 
@@ -130,11 +131,12 @@ if __name__ == '__main__':
     parser.add_argument('--file_type', '-t', choices=['pvalues', 'estimates'], type=str, default='pvalues') # if estimate, lookup pvalues
     parser.add_argument('--feature', '-f', type=str, default=None) # which sheet? ex: sum_ipu_lgth
     parser.add_argument('--condition', '-c', choices=['part', 'conv', 'diff'], default=None)
-    parser.add_argument('--on', '-on', choices=['agent', 'feature', 'interaction'], default='agent') # Agent[T.R]
+    parser.add_argument('--on', '-on', choices=['agent', 'feature', 'interaction'], default=None) # Agent[T.R]
     parser.add_argument('--pmax', '-p', type=float, default=0.01) # pvalue
     parser.add_argument('--parcellation', '-n', type=str, default='data_neuro/parcellation') 
     parser.add_argument('--img_folder', '-i', type=str, default=None)
     parser.add_argument('--brain', '-b', choices=['white', 'inflated'], default='white')
+    parser.add_argument('--save_gif', '-g', type=bool, default=False)
     parser.add_argument('--views', '-v', nargs='+', choices=['right', 'left', 'top', 'bottom', 'front', 'back'], default=['right', 'left', 'top', 'bottom', 'front', 'back'])
     args = parser.parse_args()
     print(args)
@@ -165,5 +167,5 @@ if __name__ == '__main__':
                 b_obj = create_brain_obj(l_file, r_file, brain_areas, args.brain, cmap=cmap, vmin=vmin, vmax=vmax)
                 visualise_brain(b_obj)
             else:
-                generate_img(l_file, r_file, brain_areas, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views, is_estimate=is_estimate, cmap=cmap, vmin=vmin, vmax=vmax)
+                generate_img(l_file, r_file, brain_areas, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views, is_estimate=is_estimate, cmap=cmap, vmin=vmin, vmax=vmax, save_gif=args.save_gif)
     
