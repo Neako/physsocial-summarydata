@@ -61,7 +61,7 @@ def read_data(data:str, parcellation:str, feature:str, on:str, pmax:float, is_es
     # return
     return l_file, r_file, brain_areas
 
-def create_brain_obj(l_file, r_file, activated_areas, brain_name, cmap='copper', vmin=0., vmax=0.01):
+def create_brain_obj(l_file, r_file, activated_areas, brain_name, hemisphere='both', cmap='copper', vmin=0., vmax=0.01):
     """Create BrainObj, add areas, and return object
 
     Input:
@@ -72,6 +72,8 @@ def create_brain_obj(l_file, r_file, activated_areas, brain_name, cmap='copper',
         dataframe of selected areas, shape ['index', 'values']
     brain_name: str
         parameter for the BrainObj, in ('white', 'inflated')
+    hemisphere: str
+        parameter for the BrainObj, in ('both', 'left', 'right)
     cmap: str
         maplotlib colomap to use. For pvalues, 'copper' should be used; for estimates, 'coolwarm'.
     clim: tuple
@@ -81,7 +83,7 @@ def create_brain_obj(l_file, r_file, activated_areas, brain_name, cmap='copper',
     --------
     b_obj: visbrain.objects.BrainObj
     """
-    b_obj = BrainObj(brain_name, translucent=False, hemisphere='both')
+    b_obj = BrainObj(brain_name, translucent=False, hemisphere=hemisphere)
     annot_data = b_obj.get_parcellates(l_file)
     
     # errors if missing labels - removing labels not in annot_data
@@ -100,10 +102,10 @@ def visualise_brain(b_obj):
     vb = Brain(brain_obj=b_obj, bgcolor='black')
     vb.show()
 
-def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, is_estimate=False, cmap='copper', vmin=0., vmax=0.01, save_gif=False):
+def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, add_hemispheres, is_estimate=False, cmap='copper', vmin=0., vmax=0.01, save_gif=False):
     """Generate .png and .gif animation of rotating brains
     """
-    sc = SceneObj(size=(1500, 1000))
+    sc = SceneObj(size=(1000*(len(views)//2 + (1 if add_hemispheres else 0)), 1000*(len(views)>1)))
     KW = dict(title_size=14., zoom=2.) # zoom not working
     CBAR_STATE = dict(cbtxtsz=12, txtsz=10., width=.1, cbtxtsh=3., rect=(-.3, -2., 1., 4.))
     # PLOT OBJECTS
@@ -113,6 +115,12 @@ def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, i
         sc.add_to_subplot(b_obj, row=i//2, col=i%2, rotate=rot, title=rot, **KW)
         # Get the colorbar of the brain object and add it to the scene
         # Identical brain ==> same colorbar
+    if add_hemispheres:
+        # add left brain
+        b_obj = create_brain_obj(l_file, r_file, activated_areas, brain_name, hemisphere='right', cmap=cmap, vmin=vmin, vmax=vmax)
+        sc.add_to_subplot(b_obj, row=i//2+1, col=0, rotate='left', title='right half', **KW)
+        b_obj = create_brain_obj(l_file, r_file, activated_areas, brain_name, hemisphere='left', cmap=cmap, vmin=vmin, vmax=vmax)
+        sc.add_to_subplot(b_obj, row=i//2+1, col=1, rotate='right', title='left half', **KW)
     if is_estimate:
         # cmap needs to be set for all objects
         cb_parr = ColorbarObj(b_obj, cblabel='Data to parcellates', **CBAR_STATE)
@@ -138,6 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('--brain', '-b', choices=['white', 'inflated'], default='white')
     parser.add_argument('--save_gif', '-g', type=bool, default=False)
     parser.add_argument('--views', '-v', nargs='+', choices=['right', 'left', 'top', 'bottom', 'front', 'back'], default=['right', 'left', 'top', 'bottom', 'front', 'back'])
+    parser.add_argument('--add_hemispheres', '-hem', type=bool, default=False)
     args = parser.parse_args()
     print(args)
     
@@ -161,11 +170,11 @@ if __name__ == '__main__':
             cmap = 'copper' if not is_estimate else 'coolwarm'
             v = max(abs(brain_areas['values'].min()), brain_areas['values'].max())
             vmin = -1*v if is_estimate else 0
-            vmax = v
+            vmax = v if is_estimate else args.pmax
             print(cmap, vmin, vmax)
             if args.img_folder is None:
                 b_obj = create_brain_obj(l_file, r_file, brain_areas, args.brain, cmap=cmap, vmin=vmin, vmax=vmax)
                 visualise_brain(b_obj)
             else:
-                generate_img(l_file, r_file, brain_areas, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))),args.views, is_estimate=is_estimate, cmap=cmap, vmin=vmin, vmax=vmax, save_gif=args.save_gif)
+                generate_img(l_file, r_file, brain_areas, args.brain, os.path.join(CURRENTDIR,os.path.join(args.img_folder, f+'_'+on+'_'+str(args.pmax))), args.views, args.add_hemispheres, is_estimate=is_estimate, cmap=cmap, vmin=vmin, vmax=vmax, save_gif=args.save_gif)
     

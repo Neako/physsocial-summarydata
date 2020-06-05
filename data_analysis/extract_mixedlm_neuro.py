@@ -99,7 +99,7 @@ def create_df(results, datan, main_cols, int_cols, which_remove=[]):
     # return 
     return merres, merneuro
 
-def execute_glm(merneuro, int_cols, areas):
+def execute_glm(merneuro, int_cols, areas, formula, re_f):
     """Execute GLM
 
     Input:
@@ -110,6 +110,10 @@ def execute_glm(merneuro, int_cols, areas):
         list of strings, interest columns name, prgram argument "functions"
     areas: list
         list of areas in the neuro file. extracted before renaming occured
+    formula: str
+        raw formula for smf.mixedlm()
+    re_f: str
+        re_formula for smf.mixedlm()
     
     Output:
     --------
@@ -124,28 +128,28 @@ def execute_glm(merneuro, int_cols, areas):
     pvalues = {}
     estimates = {}
 
-    re_f = "1 + Trial"
     for c in int_cols:
         print(c)
         p_c_dic = {}
         e_c_dic = {}
         for formula_part in ['_part', '_conv', '_diff']:
+            int_cols = ['Intercept', c+formula_part] + (['Agent[T.R]', c+formula_part+':Agent[T.R]'] if re.search('Agent', formula) is not None else [])
             start_time = time.time()
             print('\t', formula_part)
             p_f_dic = []
             e_f_dic = []
             for ar in areas:
-                formula_1 = "area_{} ~ {} * Agent + Trial".format(str(ar).zfill(3), c+formula_part)
+                formula_1 = formula.format(str(ar).zfill(3), c+formula_part)
                 print(formula_1)
                 md = smf.mixedlm(formula_1, merneuro, groups=merneuro["locutor"], re_formula=re_f)
                 with warnings.catch_warnings(record=True) as w:
                     mdf = md.fit()
                 # Add warnings to model data
-                p_to_dic = mdf.pvalues[['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]']]
+                p_to_dic = mdf.pvalues[int_cols]
                 p_to_dic['Warning'] = None if len(w) == 0 else str(w[-1].category).replace("<class '", '').replace("'>", '').split('.')[-1]
                 e_to_dic = mdf.fe_params
                 e_to_dic['Warning'] = None if len(w) == 0 else str(w[-1].category).replace("<class '", '').replace("'>", '').split('.')[-1]
-                # Add to dic
+                # Add to dic - no need to add "area" bc continuous set of areas, starting at 0 (control)
                 p_f_dic.append(p_to_dic)
                 e_f_dic.append(e_to_dic)
             p_c_dic[formula_part] = pd.DataFrame(p_f_dic)
@@ -153,16 +157,25 @@ def execute_glm(merneuro, int_cols, areas):
             print("\tElapsed: {0:4.2f}".format(time.time() - start_time))
         pvalues[c] = p_c_dic
         estimates[c] = e_c_dic
+    metadata={'pvalues': [c.replace(formula_part, '{}') for c in p_c_dic[formula_part].columns], 
+        'estimates': [c.replace(formula_part, '{}') for c in e_c_dic[formula_part].columns]
+    }
 
-    return pvalues, estimates
+    return pvalues, estimates, metadata
 
-def saving_as_json(pvalues, estimates, json_folder, name_insert=''):
-    """Save pvalues and estimates to different files in json_folder for later analysis
+def saving_as_json(pvalues, estimates, metadata, json_folder, name_insert=''):
+    """Save pvalues and estimates to different files in json_folder for later analysis + add metadata
     """
     with open(os.path.join(json_folder,'pvalues'+name_insert+'.txt'), 'w') as json_file:
-        json.dump({c:{f:df.values.tolist() for f, df in v.items()} for c,v in pvalues.items()}, json_file)
+        data = {c:{f:df.values.tolist() for f, df in v.items()} for c,v in pvalues.items()}
+        data['metadata'] = {k:v for k,v in metadata.items()}
+        data['metadata']['columns'] = metadata['pvalues']
+        json.dump(data, json_file)
     with open(os.path.join(json_folder,'estimates'+name_insert+'.txt'), 'w') as json_file:
-        json.dump({c:{f:df.values.tolist() for f, df in v.items()} for c,v in estimates.items()}, json_file)
+        data = {c:{f:df.values.tolist() for f, df in v.items()} for c,v in estimates.items()}
+        data['metadata'] = {k:v for k,v in metadata.items()}
+        data['metadata']['columns'] = metadata['estimates']
+        json.dump(data, json_file)
 
 def loading_as_json(json_folder, name_insert=''):
     with open(os.path.join(json_folder,'pvalues'+name_insert+'.txt'), 'r') as json_file:
@@ -179,12 +192,10 @@ def df_to_excel(pvalues, int_cols, excel_path):
         for formula_part in ['_part', '_conv', '_diff']:
             df = pvalues[c][formula_part]
             if not isinstance(df, pd.core.frame.DataFrame):
-                # estimates have an extra column: "Trial"
-                try:
-                    df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Warning'])
-                except:
-                    df = pd.DataFrame(df, columns=['Intercept', 'Agent[T.R]', c+formula_part, c+formula_part+':Agent[T.R]', 'Trial', 'Warning'])
-            df.sort_values(by=c+formula_part+':Agent[T.R]', ascending=True, inplace=True)
+                # load from dictionary
+                cols = pvalues['metadata']['columns']
+                df = pd.DataFrame(df, columns=cols)
+            df.sort_values(by=c+formula_part, ascending=True, inplace=True) # cannot use interaction as some results won't have that
             df.to_excel(writer, sheet_name=c+formula_part)
     writer.save()
     print('Saved successfully')
@@ -212,6 +223,8 @@ if __name__ == '__main__':
     parser.add_argument('--json_exists', '-e', type=bool, default=False)
     parser.add_argument('--is_align', '-a', type=bool, default=False)
     parser.add_argument('--img_folder', '-i', type=str, default=None)
+    parser.add_argument('--lm_formula', '-form', type=str, default="area_{} ~ {} * Agent + Trial", help="arguments changed in loop should be addressed as {} ex: area_{} or feature = {}")
+    parser.add_argument('--re_formula', '-re', type=str, default="1 + Trial")
     args = parser.parse_args()
     print(args)
 
@@ -223,14 +236,22 @@ if __name__ == '__main__':
         areas = datan.area.unique()
         main_cols = ['locutor', 'Trial', 'Agent']
         merres, merneuro = create_df(results, datan, main_cols, args.functions, which_remove=args.remove_subjects)
-        pvalues, estimates = execute_glm(merneuro, args.functions, areas)
+        pvalues, estimates, metadata = execute_glm(merneuro, args.functions, areas, formula = args.lm_formula, re_f=args.re_formula)
+        # Adding metadata to the file
+        metadata['formula'] = args.lm_formula
+        metadata['re_f'] = args.re_formula
+        metadata['ling_file'] = args.linguistic_data
+        metadata['neuro_file'] = args.neuro_data
         if args.json_folder is not None:
-            saving_as_json(pvalues, estimates, os.path.join(CURRENTDIR, args.json_folder), name_insert=('' if not args.is_align else '_align'))
+            saving_as_json(pvalues, estimates, metadata, os.path.join(CURRENTDIR, args.json_folder), name_insert=('' if not args.is_align else '_align'))
 
     # case 2: load from json
     if args.json_exists:
         try:
             pvalues, estimates = loading_as_json(os.path.join(CURRENTDIR, args.json_folder), name_insert=('' if not args.is_align else '_align'))
+            for (k,v) in pvalues['metadata'].items():
+                if k != 'columns':
+                    print(k, v)
         except:
             print('JSON files do not exist!')
 
