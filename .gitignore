@@ -1,6 +1,9 @@
 # Private dataset
 convers/*
 data_neuro/*
+data/pvalues*
+data/estimates*
+data/extracted*
 # Ignore public software
 MarsaTag/*
 SPPAS/*
