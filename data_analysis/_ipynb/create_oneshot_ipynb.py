@@ -107,3 +107,33 @@ data = {
 
 with open(os.path.join(currdir,'data_analysis/_ipynb/oneshot_ipynb.ipynb'), 'w') as json_file:
     json.dump(data, json_file)
+
+"""
+# Later analysis
+thres = [0.001, 0.01, 0.05, 1]
+table = []
+for file in ['data/pvalues.xlsx','data/pvalues_align.xlsx']:
+    xl = pd.ExcelFile(file)
+    features = list(xl.sheet_names)
+    for feat in features:
+        results = pd.read_excel(file, sheet_name = feat, index_col=0)
+        print(feat, results.columns)
+        for col in [c for c in results.columns if c not in ['Intercept', 'Warning']]:
+            for i, t in enumerate(thres):
+                store = {}
+                store['feature'] = '_'.join(feat.split('_')[:-1])
+                store['condition'] = feat.split('_')[-1]
+                if col == 'Agent[T.R]':
+                    store['fixed_effect'] = col
+                else:
+                    store['fixed_effect'] = '_'.join(col.split('_')[:-1]) if (re.search(':', col) is None) else 'interaction'
+                store['threshold'] = t
+                if i == 0:
+                    store['areas'] = str(list(results[results[col] <= t].index))
+                else:
+                    store['areas'] = str(list(results[(results[col] <= t) & (results[col] > thres[i-1])].index))
+                table.append(store)
+
+pd.DataFrame(table).to_excel('data_neuro/neuro_summary.xlsx', index=False)
+
+"""
