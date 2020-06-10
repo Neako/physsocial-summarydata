@@ -1,9 +1,16 @@
 # Private dataset
 convers/*
 data_neuro/*
+data/pvalues*
+data/estimates*
+data/extracted*
 # Ignore public software
 MarsaTag/*
 SPPAS/*
 visbrain/*
-# OSX files
+# Ignore extracted data
+data/extracted*
+# extra files
 *.DS_Store
+marsatag-ui.log*
+*__pycache__*
