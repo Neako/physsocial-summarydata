@@ -112,6 +112,7 @@ with open(os.path.join(currdir,'data_analysis/_ipynb/oneshot_ipynb.ipynb'), 'w')
 # Later analysis
 thres = [0.001, 0.01, 0.05, 1]
 table = []
+warnings = {}
 for file in ['data/pvalues.xlsx','data/pvalues_align.xlsx']:
     xl = pd.ExcelFile(file)
     features = list(xl.sheet_names)
@@ -133,7 +134,11 @@ for file in ['data/pvalues.xlsx','data/pvalues_align.xlsx']:
                 else:
                     store['areas'] = str(list(results[(results[col] <= t) & (results[col] > thres[i-1])].index))
                 table.append(store)
+        if store['feature'] in warnings.keys():
+            warnings[store['feature']][store['condition']] = results['Warning'].apply(lambda x: 1 if (str(x).lower() != 'nan') else 0).sum()/results.shape[0]
+        else:
+            warnings[store['feature']] = {store['condition'] : results['Warning'].apply(lambda x: 1 if (str(x).lower() != 'nan') else 0).sum()/results.shape[0]}
 
 pd.DataFrame(table).to_excel('data_neuro/neuro_summary.xlsx', index=False)
-
+pd.DataFrame(warnings).to_excel('data_neuro/neuro_errors.xlsx')
 """
