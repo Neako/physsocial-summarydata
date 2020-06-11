@@ -14,44 +14,8 @@ import sys
 import os
 import argparse
 import ast
-
-def add_header():
-    return """---
-title: "R Notebook"
-output:
-html_document:
-    df_print: paged
----
-"""
-
-def add_libraries(additional_libaries = []):
-    s = """```{r}
-library(readxl)
-library(xlsx)
-library(sjPlot)
-library(ggplot2)
-library(lme4)
-library(stringr)
-library(ggExtra)
-library(dplyr)
-"""
-    for lib in additional_libaries:
-        s += "library(" + lib + ")\n"
-    s +="""```\n"""
-    return s
-
-def add_data(linguistic_file=None, remove_subjects=[]):
-    s = """
-```{r}
-# linguistic data
-data <- read_excel('"""+linguistic_file+"""')
-data$Agent = ifelse(data$conv == 1,"H","R")
-data = data[!(data$locutor %in% c("""+','.join([str(x) for x in remove_subjects])+""")),]
-# data = data[which(data$locutor > 1),]
-data$Trial2 = paste0('t', str_pad(data$conv_id_unif, 2, pad = "0"))
-```
-"""
-    return s
+# local functions
+from generate_utils import *
 
 def add_saver(functions):
     features = [f+'_'+state for f in functions for state in ['overall', 'part', 'conv']]
@@ -112,32 +76,6 @@ for (a in c('Agent ', 'Trial2', 'Agent:Trial2')){
 """
     return s
 
-def add_plot(function_name):
-    return """
-```{r}
-# plot
-g <- ggplot(merres, aes(x = data_conv, y = data_part, color=Agent)) + 
-        geom_point(alpha = 0.7) + 
-        geom_density_2d(alpha=0.5) + 
-        geom_smooth(method = "lm") +
-        theme(legend.position="bottom") + xlim(0,max(merres$data_conv)) + ylim(0,max(merres$data_part)) +
-        labs(x = "VI: """+function_name+""" conv",
-            y = "VD: """+function_name+""" part",
-            color = "Agent")
-ggMarginal(g, type="densigram", margins = "both", groupColour = TRUE, fill="white")
-```
-"""
-
-def print_saver(excel_output):
-    return """
-# Saver
-```{r}
-# Write the first data set in a new workbook
-write.xlsx(df_overall, file = '"""+excel_output+"""',
-      sheetName = "summary", append = FALSE)
-```
-"""
-
 def create_file(functions, filename, ling_path, remove_subjects, excel_output):
     # read path to create file
     currdir = os.path.dirname(os.path.realpath(__file__)).replace('/data_analysis','')
@@ -147,15 +85,16 @@ def create_file(functions, filename, ling_path, remove_subjects, excel_output):
     # Write data to the file
     rmd.write(add_header())
     rmd.write(add_libraries())
-    ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
-    rmd.write(add_data(ling_path, remove_subjects))
+    # ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
+    rmd.write(add_data(neuro_file=None, linguistic_file=ling_path, remove_subjects=remove_subjects))
     rmd.write(add_saver(functions))
     for f in functions:
         rmd.write("\n# " + f )
         rmd.write(add_description(f))
         rmd.write(add_description_split(f))
-        rmd.write(add_plot(f))
-    rmd.write(print_saver(os.path.join(currdir,os.path.join('data_analysis/_exploration',excel_output))))
+        rmd.write(add_mixedplot(f))
+    # excel_output = os.path.join(currdir,os.path.join('data_analysis/_exploration',excel_output))
+    rmd.write(print_saver(excel_output, {"df_overall":"summary"}, excel_exists=False))
     # Close the file
     rmd.close()
 

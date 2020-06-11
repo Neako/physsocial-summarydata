@@ -13,54 +13,8 @@ import sys
 import os
 import argparse
 import ast
-
-def add_header():
-    return """---
-title: "R Notebook"
-output:
-html_document:
-    df_print: paged
----
-"""
-
-def add_libraries(additional_libaries = []):
-    s = """```{r}
-library(readxl)
-library(sjPlot)
-library(ggplot2)
-library(lme4)
-library(stringr)
-library(ggExtra)
-"""
-    for lib in additional_libaries:
-        s += "library(" + lib + ")\n"
-    s +="""```\n"""
-    return s
-
-def add_data(neuro_file=None, linguistic_file=None, remove_subjects=[]):
-    s = """
-```{r}
-# linguistic data
-data <- read_excel('"""+linguistic_file+"""')
-data$Agent = ifelse(data$conv == 1,"H","R")
-data = data[!(data$locutor %in% c("""+','.join([str(x) for x in remove_subjects])+""")),]
-# data = data[which(data$locutor > 1),]
-data$Trial2 = paste0('t', str_pad(data$Trial, 2, pad = "0"))
-data_convprime = data[which(data$prime == "conversant"),]
-data_partprime = data[which(data$prime == "participant"),]
-"""
-    if neuro_file is not None:
-        s += """# neuro data
-broca = read.table(file = '"""+neuro_file+"""', sep = '\\t', header = FALSE)
-colnames(broca) = c("area", "locutor", "session", "image", "bold", "Agent", "Trial")
-broca = broca[which(broca$Agent != ""),] # remove last line: count
-broca$Agent = ifelse(as.numeric(broca$Agent) == 2,"H","R") # "Factor w/ 3 levels" bc of last line
-broca$Trial = broca$Trial-1
-```
-"""
-    else:
-        s += "```\n"
-    return s
+# local functions
+from generate_utils import *
 
 def add_plot(function_name, prime):
     return """```{r error=TRUE}
@@ -80,29 +34,6 @@ ggplot(data_"""+prime+"""prime,
        y = '"""+function_name+"""')
 ```
 """
-
-def add_mixedplot(function_name):
-    s = """
-```{r error=TRUE}
-names(data_convprime)[names(data_convprime) == '"""+function_name+"""'] = 'data_conv'
-names(data_partprime)[names(data_partprime) == '"""+function_name+"""'] = 'data_part'
-merres = merge(data_convprime[,c('locutor', "Trial", "Agent", 'data_conv')], data_partprime[,c('locutor', "Trial", "Agent", 'data_part')], by=c("locutor", "Trial", "Agent"))
-# plot
-g <- ggplot(merres, aes(x = data_conv, y = data_part, color=Agent)) + 
-        geom_point(alpha = 0.7) + 
-        geom_density_2d(alpha=0.5) + 
-        theme(legend.position="bottom") + xlim(0,max(merres$data_conv)) + ylim(0,max(merres$data_part)) +
-        labs(x = "VI: """+function_name+""" conv",
-            y = "VD: """+function_name+""" part",
-            color = "Agent")
-ggMarginal(g, type="densigram", margins = "both", groupColour = TRUE)
-
-# change names to avoid later confusion
-names(data_convprime)[names(data_convprime) == 'data_conv'] = '"""+function_name+"""' 
-names(data_partprime)[names(data_partprime) == 'data_part'] = '"""+function_name+"""'
-```
-"""
-    return s
 
 def add_models(function_name, prime, formula_ling, formula_neuro, has_neuro=False, save_data=False, is_first=False):
     s = """
@@ -168,19 +99,6 @@ df_overall = data.frame(mean=numeric("""+str(len(features))+"""),
 """
     return s
 
-def print_saver(excel_output):
-    return """
-# Saver
-```{r error=TRUE}
-# Write the first data set in a new workbook
-write.xlsx(df_overall, file = '"""+excel_output+"""',
-      sheetName = "summary", append = FALSE)
-# Write model to last sheet:
-write.xlsx(df_model, file = '"""+excel_output+"""',
-      sheetName = "model", append = TRUE)
-```
-"""
-
 def create_file(functions, primes, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro, remove_subjects, add_summary):
     # read path to create file
     currdir = os.path.dirname(os.path.realpath(__file__)).replace('/data_analysis','')
@@ -190,9 +108,9 @@ def create_file(functions, primes, filename, neuro_path, ling_path, plot_distrib
     # Write data to the file
     rmd.write(add_header())
     rmd.write(add_libraries())
-    neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
-    ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
-    rmd.write(add_data(neuro_path, ling_path, remove_subjects))
+    # neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
+    # ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
+    rmd.write(add_data(neuro_path, ling_path, remove_subjects, is_align=True))
     if add_summary:
         rmd.write(add_saver(functions, primes))
     for i, f in enumerate(functions):
@@ -202,10 +120,12 @@ def create_file(functions, primes, filename, neuro_path, ling_path, plot_distrib
                 rmd.write(add_plot(f, prime[:4]))
             rmd.write(add_models(f, prime[:4], formula_ling, formula_neuro, has_neuro = (neuro_path is not None), save_data=(add_summary is not None), is_first=((i+j)==0))) # could be i+j, i+2*j, whichever, the only 0 is (0,0)
         if plot_distrib:
-            rmd.write(add_mixedplot(f))
+            rmd.write(add_mixedplot(f, is_align=True))
 
     if add_summary:
-        rmd.write(print_saver(os.path.join(currdir,os.path.join('data_analysis/_exploration',add_summary))))
+        # add_summary = os.path.join(currdir,os.path.join('data_analysis/_exploration',add_summary))
+        dfs = {"df_overall":"summary", "df_model":"model"}
+        rmd.write(print_saver(add_summary, dfs, excel_exists=False))
     # Close the file
     rmd.close()
 

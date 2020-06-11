@@ -16,52 +16,8 @@ import sys
 import os
 import argparse
 import ast
-
-def add_header():
-    return """---
-title: "R Notebook"
-output:
-html_document:
-    df_print: paged
----
-"""
-
-def add_libraries(additional_libaries = []):
-    s = """```{r}
-library(readxl)
-library(sjPlot)
-library(ggplot2)
-library(lme4)
-library(stringr)
-library(ggExtra)
-"""
-    for lib in additional_libaries:
-        s += "library(" + lib + ")\n"
-    s +="""```\n"""
-    return s
-
-def add_data(neuro_file=None, linguistic_file=None, remove_subjects=[]):
-    s = """
-```{r}
-# linguistic data
-data <- read_excel('"""+linguistic_file+"""')
-data$Agent = ifelse(data$conv == 1,"H","R")
-data = data[!(data$locutor %in% c("""+','.join([str(x) for x in remove_subjects])+""")),]
-# data = data[which(data$locutor > 1),]
-data$Trial2 = paste0('t', str_pad(data$conv_id_unif, 2, pad = "0"))
-"""
-    if neuro_file is not None:
-        s += """# neuro data
-broca = read.table(file = '"""+neuro_file+"""', sep = '\\t', header = FALSE)
-colnames(broca) = c("area", "locutor", "session", "image", "bold", "Agent", "Trial")
-broca = broca[which(broca$Agent != ""),] # remove last line: count
-broca$Agent = ifelse(as.numeric(broca$Agent) == 2,"H","R") # "Factor w/ 3 levels" bc of last line
-broca$Trial = broca$Trial-1
-```
-"""
-    else:
-        s += "```\n"
-    return s
+# local functions
+from generate_utils import *
 
 def add_mergedata(function_name, formula_ling, formula_neuro, has_neuro=False, save_data=False, is_first=False):
     s = """
@@ -83,13 +39,26 @@ tab_model(mdl, title = paste("part ~ conv ", '"""+function_name+"""'))
 s = summary(mdl)[['coefficients']]
 s = data.frame(s)
 s$Feature = '"""+function_name+"""'
-l = data.frame(confint(mdl))[5:9,]
+l = data.frame(suppressWarnings(confint(mdl)))[5:9,]
 """
         if is_first:
             s += """df_overall = cbind(s,l)
 """
         else:
             s += """df_overall = rbind(df_overall, cbind(s,l))
+"""
+    s += """
+# saving other features
+data_r = merres[which(merres$Agent == "R"),]
+data_h = merres[which(merres$Agent == "H"),]
+for (pc in c('part', 'conv')){
+    df2[paste0('"""+function_name+"""_', pc), 'mean'] = mean(merres[[paste0('data_',pc)]])
+    df2[paste0('"""+function_name+"""_', pc), 'std'] = sd(merres[[paste0('data_',pc)]])
+    df2[paste0('"""+function_name+"""_', pc), 'mean_r'] = mean(data_r[[paste0('data_',pc)]])
+    df2[paste0('"""+function_name+"""_', pc), 'std_r'] = sd(data_r[[paste0('data_',pc)]])
+    df2[paste0('"""+function_name+"""_', pc), 'mean_h'] = mean(data_h[[paste0('data_',pc)]])
+    df2[paste0('"""+function_name+"""_', pc), 'std_h'] = sd(data_h[[paste0('data_',pc)]])
+}
 """
     if has_neuro:
         s += """# creating merged data - neuro
@@ -158,15 +127,22 @@ ggplot(data,
 """
     return s
 
-def print_saver(excel_output, excel_exists):
-    return """
-# Saver
+def add_saver(functions):
+    features = [f+'_'+state for f in functions for state in ['part', 'conv']]
+    s = """
 ```{r}
-# Write the first data set in a new workbook
-write.xlsx(df_overall, file = '"""+excel_output+"""',
-      sheetName = "models", append = """+str(excel_exists).upper()+""")
+# extra columns will add themselves automatically - just creating structures
+df2 = data.frame(mean=numeric("""+str(len(features))+"""),
+                std=numeric("""+str(len(features))+"""), 
+                mean_r=numeric("""+str(len(features))+"""),
+                std_r=numeric("""+str(len(features))+"""),
+                mean_h=numeric("""+str(len(features))+"""),
+                std_h=numeric("""+str(len(features))+"""),
+                row.names = c('"""+"','".join(features)+"""'),
+                stringsAsFactors=FALSE)
 ```
 """
+    return s
 
 def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formula_ling, formula_neuro, remove_subjects, excel_output, excel_exists):
     # read path to create file
@@ -177,9 +153,10 @@ def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formul
     # Write data to the file
     rmd.write(add_header())
     rmd.write(add_libraries())
-    neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
-    ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
+    #neuro_path = None if neuro_path is None else os.path.join(currdir,neuro_path)
+    #ling_path = None if ling_path is None else os.path.join(currdir,ling_path)
     rmd.write(add_data(neuro_path, ling_path, remove_subjects))
+    rmd.write(add_saver(functions))
 
     for i,f in enumerate(functions):
         rmd.write("\n# " + f )
@@ -189,7 +166,9 @@ def create_file(functions, filename, neuro_path, ling_path, plot_distrib, formul
         rmd.write(add_plot(f))
 
     if excel_output is not None:
-        rmd.write(print_saver(os.path.join(currdir,os.path.join('data_analysis/_exploration',excel_output)), excel_exists))
+        # excel_output = os.path.join(currdir,os.path.join('data_analysis/_exploration',excel_output))
+        dfs = {"df_overall":"models", "df2":"hr_comparison"}
+        rmd.write(print_saver(excel_output, dfs, excel_exists))
     # Close the file
     rmd.close()
 
