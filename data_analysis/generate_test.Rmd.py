@@ -105,28 +105,6 @@ ggMarginal(g, type="density", margins = "both", groupColour = TRUE)
 ```
 """
 
-def add_description(function_name):
-    s = """
-```{r}
-ggplot(data, aes(x = """+function_name+""", color=Agent)) + facet_grid(tier ~ .) + geom_histogram(aes(y=..density..), alpha=0.5, fill="white") + geom_density(alpha=.2)
-ggplot(data, aes(x = Trial2, y = """+function_name+""", color=Agent)) + facet_grid(tier ~ .) + geom_boxplot()
-ggplot(data, 
-       aes(x = Agent,
-           fill = Agent,  
-           y = """+function_name+""")) +
-  stat_summary(fun.y = mean,
-               geom = "bar") +
-  stat_summary(fun.ymin = function(x) mean(x) - sd(x), 
-               fun.ymax = function(x) mean(x) + sd(x), 
-               geom="errorbar", 
-               width = 0.25) +
-  facet_wrap(~tier) +
-  labs(x = "Agent",
-       y = '"""+function_name+"""')
-```\n
-"""
-    return s
-
 def add_saver(functions):
     features = [f+'_'+state for f in functions for state in ['part', 'conv']]
     s = """

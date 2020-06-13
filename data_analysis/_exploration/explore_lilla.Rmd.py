@@ -35,6 +35,7 @@ library(ggplot2)
 library(lme4)
 library(stringr)
 library(ggExtra)
+library(xlsx)
 ```\n"""
     return s
 
@@ -59,6 +60,10 @@ data_convprime$len_cl_p = data_convprime$len_cl
 data_convprime$len_cl_t = data_convprime$len_cl
 data_convprime$len_cl_over_p = data_convprime$len_cl / data_convprime$len_pl
 data_convprime$len_cl_over_t = data_convprime$len_cl / data_convprime$len_tl
+data_convprime$lillac_p = data_convprime$lilla_num
+data_convprime$lillac_t = data_convprime$lilla_num
+data_convprime$lillac_over_p = data_convprime$lilla_num / data_convprime$len_pl
+data_convprime$lillac_over_t = data_convprime$lilla_num / data_convprime$len_tl
 ```\n
 """
     else: # not align
@@ -75,10 +80,10 @@ def add_mergedata():
     s = """
 ```{r}
 # creating merged data - ling
-temp1 = subset(data, select = c("locutor", "conv_id_unif", "Agent", 'sum_ipu_lgth'), tier=='conversant')
-colnames(temp1) = c("locutor", "Trial", "Agent", "data_conv")
-temp2 = subset(data, select = c("locutor", "conv_id_unif", "Agent", 'sum_ipu_lgth'), tier=='participant')
-colnames(temp2) = c("locutor", "Trial", "Agent", "data_part")
+temp1 = subset(data, select = c("locutor", "conv_id_unif", "Agent", 'sum_ipu_lgth', 'nb_tokens'), tier=='conversant')
+colnames(temp1) = c("locutor", "Trial", "Agent", "ipu_conv", "tokens_conv")
+temp2 = subset(data, select = c("locutor", "conv_id_unif", "Agent", 'sum_ipu_lgth', 'nb_tokens'), tier=='participant')
+colnames(temp2) = c("locutor", "Trial", "Agent", "ipu_part", "tokens_part")
 merres = merge(temp1, temp2, by=c("locutor", "Trial", "Agent"))
 merfull = merge(merres, data_convprime, by=c("locutor", "Trial", "Agent"))
 # separating data again
@@ -99,7 +104,7 @@ write.xlsx(df_overall, file = '"""+excel_output+"""',
 """
 
 def add_saver(functions):
-    features = functions + [f+'_over_sumipu' for f in functions]
+    features = functions + [f+'_over_sumipu' for f in functions] + [f+'_over_nbtokens' for f in functions]
     s = """
 ```{r}
 # extra columns will add themselves automatically - just creating structures
@@ -114,7 +119,7 @@ df_overall = data.frame(mean_h=numeric("""+str(len(features))+"""),
 """
     return s
 
-def add_description(function_name, sum_ipu_length='data_part'):
+def add_description(function_name, convpart='_part'):
     s = """
 ```{r}
 # computing values
@@ -124,13 +129,19 @@ def add_description(function_name, sum_ipu_length='data_part'):
 df_overall['"""+function_name+"""', 'mean"""+part+"""'] = mean(data"""+part+"""$'"""+function_name+"""')
 df_overall['"""+function_name+"""', 'std"""+part+"""'] = sd(data"""+part+"""$'"""+function_name+"""')
 
-data"""+part+"""$'"""+function_name+"""_over_sumipu' = data"""+part+"""$'"""+function_name+"""'/data"""+part+"""$'"""+sum_ipu_length+"""'
+# over_sumipu
+data"""+part+"""$'"""+function_name+"""_over_sumipu' = data"""+part+"""$'"""+function_name+"""'/data"""+part+"""$'"""+'ipu'+convpart+"""'
 df_overall['"""+function_name+"""_over_sumipu', 'mean"""+part+"""'] = mean(data"""+part+"""$'"""+function_name+"""_over_sumipu')
 df_overall['"""+function_name+"""_over_sumipu', 'std"""+part+"""'] = sd(data"""+part+"""$'"""+function_name+"""_over_sumipu')
+# over_nbtokens
+data"""+part+"""$'"""+function_name+"""_over_nbtokens' = data"""+part+"""$'"""+function_name+"""'/data"""+part+"""$'"""+'tokens'+convpart+"""'
+df_overall['"""+function_name+"""_over_nbtokens', 'mean"""+part+"""'] = mean(data"""+part+"""$'"""+function_name+"""_over_nbtokens')
+df_overall['"""+function_name+"""_over_nbtokens', 'std"""+part+"""'] = sd(data"""+part+"""$'"""+function_name+"""_over_nbtokens')
 """
     s+= """
 df_overall['"""+function_name+"""', 'wilcox.pvalue'] = wilcox.test(data_h$'"""+function_name+"""', data_r$'"""+function_name+"""')$p.value
 df_overall['"""+function_name+"""_over_sumipu', 'wilcox.pvalue'] = wilcox.test(data_h$'"""+function_name+"""_over_sumipu', data_r$'"""+function_name+"""_over_sumipu')$p.value
+df_overall['"""+function_name+"""_over_nbtokens', 'wilcox.pvalue'] = wilcox.test(data_h$'"""+function_name+"""_over_nbtokens', data_r$'"""+function_name+"""_over_nbtokens')$p.value
 ```\n
 """
     return s
@@ -156,14 +167,16 @@ def create_file(filename, basic_path, align_path, plot_distrib, remove_subjects,
     # For all of those: / sum_ipu_lgth
     # For len_cl: / len_pl and len_tl 
     # 'len_cl_t' => len_cl but duplicated for conv / part (naming issues)
-    functions=['len_pl', 'len_tl', 'len_tol', 'len_pol', 'len_cl_p', 'len_cl_t', 'len_cl_over_p', 'len_cl_over_t']
+    # lilla_num = c ==> len_cl same
+    # add _over nb_tokens
+    functions=['len_tl', 'len_pl', 'len_tol', 'len_pol', 'len_cl_t', 'len_cl_p', 'len_cl_over_t', 'len_cl_over_p', 'lillac_t', 'lillac_p', 'lillac_over_t', 'lillac_over_p'] #ordering t-p
     rmd.write(add_saver(functions))
     # Looping over functions
     for i,f in enumerate(functions):
         rmd.write("\n# " + f )
         #if plot_distrib:
         #    rmd.write(add_plot(f))
-        sum_ipu_length = 'data_part' if re.search('t', f) else 'data_conv'
+        sum_ipu_length = '_part' if re.search('t', f) else '_conv'
         rmd.write(add_description(f, sum_ipu_length))
 
     if excel_output is not None:

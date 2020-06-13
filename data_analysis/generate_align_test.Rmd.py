@@ -114,12 +114,14 @@ def create_file(functions, primes, filename, neuro_path, ling_path, plot_distrib
     if add_summary:
         rmd.write(add_saver(functions, primes))
     for i, f in enumerate(functions):
+        rmd.write("\n# {} \n".format(f))
+        if plot_distrib:
+            rmd.write(add_description(f, is_align=True))
         for j, prime in enumerate(primes):
-            rmd.write("\n# {} {}prime\n".format(f, prime[:4]))
-            if plot_distrib:
-                rmd.write(add_plot(f, prime[:4]))
+            rmd.write("\n## {} {} as prime\n".format(f, prime[:4]))
             rmd.write(add_models(f, prime[:4], formula_ling, formula_neuro, has_neuro = (neuro_path is not None), save_data=(add_summary is not None), is_first=((i+j)==0))) # could be i+j, i+2*j, whichever, the only 0 is (0,0)
         if plot_distrib:
+            rmd.write("\n## Plotting distribution\n".format(f, prime[:4]))
             rmd.write(add_mixedplot(f, is_align=True))
 
     if add_summary:

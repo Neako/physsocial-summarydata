@@ -49,7 +49,7 @@ data <- read_excel(file_path)
 data$Agent = ifelse(data$conv == 1,"H","R")
 data = data[!(data$locutor %in% c("""+','.join([str(x) for x in remove_subjects])+""")),]
 # Adding / renaming columns
-data$Trial = data$conv_id_unif
+data$Trial = data[[ifelse("Trial" %in% colnames(data), "Trial", "conv_id_unif")]] # rename if not in it
 data$Trial2 = paste0('t', str_pad(data$Trial, 2, pad = "0"))
 """
     if is_align:
@@ -118,6 +118,32 @@ g <- ggplot(merres, aes(x = data_conv, y = data_part, color=Agent)) +
 ggMarginal(g, type="densigram", margins = "both", groupColour = TRUE, fill="white")
 ```
 """
+
+def add_description(function_name, is_align=False):
+    fg = "prime" if is_align else "tier"
+    s = """
+```{r error=TRUE}
+ggplot(data, aes(x = """+function_name+""", color=Agent)) + facet_grid("""+fg+""" ~ .) + geom_histogram(aes(y=..density..), alpha=0.5, fill="white") + geom_density(alpha=.2)
+# Trial
+ggplot(data, aes(x = Trial2, y = """+function_name+""", color=Agent)) + facet_grid("""+fg+""" ~ .) + geom_boxplot()
+ggplot(data, aes(x = Trial, y = """+function_name+""", color=Agent)) + geom_point() + geom_smooth(method="lm") + facet_grid("""+fg+""" ~ .)
+# means
+ggplot(data, 
+       aes(x = Agent,
+           fill = Agent,  
+           y = """+function_name+""")) +
+  stat_summary(fun.y = mean,
+               geom = "bar") +
+  stat_summary(fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom="errorbar", 
+               width = 0.25) +
+  facet_wrap(~"""+fg+""") +
+  labs(x = "Agent",
+       y = '"""+function_name+"""')
+```\n
+"""
+    return s
 
 ###### Save data
 def print_saver(excel_output, dfs, excel_exists=False):
