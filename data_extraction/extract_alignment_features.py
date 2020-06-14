@@ -72,18 +72,24 @@ def extract_pv_text(df, tier='conversant'):
     Output:
     --------
     pv_text: list 
-        list of dict of shape ['before_oth', 'tier', 'after_oth'] containing concatenated dialog
+        list of dict of shape ['all_before_oth','before_oth', 'tier', 'after_oth'] containing concatenated dialog
     """
     oth = 'participant' if tier == 'conversant' else 'conversant'
     pv_text = []
     for i in list(df[df.tier == tier].index):
-        pv_text.append({'before_oth': ' '.join(df[(df.tier == oth) & (df.index < i)][:i].concatenated_text), 
+        pv_text.append({'before_oth': '' if i == 0 else ' '.join(df[df.index == i-1].concatenated_text),
+                        'all_before_oth': ' '.join(df[(df.tier == oth) & (df.index < i)].concatenated_text), 
                         'tier': df.concatenated_text[i],
                         'after_oth': ' '.join(df[(df.tier == oth) & (df.index >= i)].concatenated_text)})
     return pv_text
 
 def extract_vocab_count(df, nlp = sp.load('fr_core_news_sm'), keep_POS = ['NOUN', 'ADJ', 'VERB'], exceptions = [y for x in remove_lemmas.values() for y in x]):
     """ Extracts vocabulary introduced by locutor, and counts occurences in posterior dialog by other participant
+
+    Warnings:
+        1. For first sentence: isolate previous words in a separate list
+        2. For all sentences afterwards: keep all target vocab
+        3. For prime vocab: remove other words
 
     Input:
     --------
@@ -100,27 +106,42 @@ def extract_vocab_count(df, nlp = sp.load('fr_core_news_sm'), keep_POS = ['NOUN'
     --------
     l: list
         list of lists (one list: 1 sentence - sublist: tuples ('word', 'nb_occurrences'))
-    ignored_vocab: list
-        list of vocab introducted by the other locutor
+    target_vocab: list
+        list of unique vocab used by the target -- after 1rst sentence
+    introduced_vocab: list
+        list of unique vocab used and introduced by the prime
+    prime_vocab: list
+        list of unique vocab used by the prime -- all vocab
+    ignored_vocab+target_vocab: list
+        list of unique vocab used by the target -- all vocab
     """
     l = []
-    tier_vocab = []
-    ignored_vocab = []
+    prime_vocab = [] # prime vocab at step t
+    introduced_vocab = [] # prime vocab at step t _without words introduced by target_
+    ignored_vocab = [] # target 1rst intervention
+    target_vocab = [] # target vocab at step t minus 1rst intervention
     d_marsa = {'ADJ': 'ADJ', 'ADP':'PREP', 'ADV': 'ADV', 'AUX': 'VERB', 'CONJ':'CONJ', 'CCONJ':'CONJ', \
               'DET':'DET', 'INTJ': 'INTJ', 'NOUN':'NOUN', 'NUM':'DET', 'PART':'ADV', 'PRON':'PRON', \
               'PROPN':'NOUN', 'PUNCT':'PUNCT', 'SCONJ':'CONJ', 'SYM':'X', 'VERB':'VERB', 'X':'X', 'SPACE':'SPACE', '':'KEYERROR'}
-    for d in df: # for each conversant sentence
+    for it, d in enumerate(df): # for each conversant sentence
         # 1. Apply POS tagging - nlp - on every sentence.
         pre = nlp(d['before_oth'])
         post = nlp(d['after_oth'])
         # 2. Add vocab matching keep_POS tags to curr_vocab / ignored_vocab (lemmas)
-        ignored_vocab += [ x.lemma_ for x in pre if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) ]
-        curr_vocab = [ x.lemma_ for x in nlp(d['tier']) if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) and (x.lemma_ not in set(ignored_vocab))]
-        tier_vocab += curr_vocab # for analysis
+        if it==0:
+            ignored_vocab = [ x.lemma_ for x in pre if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) ]
+        else:
+            target_vocab += [ x.lemma_ for x in pre if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) ]
+        curr_vocab = [ x.lemma_ for x in nlp(d['tier']) if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) ]
+        prime_vocab += curr_vocab # for analysis
+        curr_vocab = [x for x in curr_vocab if (x not in set(ignored_vocab+target_vocab))] # already considering lemmas
+        introduced_vocab += curr_vocab
         # 3. Count vocab in post speech
         l.append(Counter([x.lemma_ for x in post if x.lemma_ in curr_vocab]))
+    # add last sentences in 'post' to target vocab
+    target_vocab += [ x.lemma_ for x in post if (d_marsa[x.pos_] in keep_POS) and (x.lemma_ not in exceptions) ]
 
-    return l, list(set(ignored_vocab)), list(set(tier_vocab))
+    return l, list(set(target_vocab)), list(set(introduced_vocab)), list(set(prime_vocab)), list(set(ignored_vocab+target_vocab))
 
 
 def compute_scc_voc(prime_text, target_text, keep_POS = None, n=10, exceptions=[y for x in remove_lemmas.values() for y in x]):
@@ -172,6 +193,8 @@ def compute_scc_voc(prime_text, target_text, keep_POS = None, n=10, exceptions=[
 def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participant'],
                     with_inserted=False, minimum_length=0.5, remove_laughter=True):
     """Extract alignment features.
+
+    Disclaimer: yes, some features are very similar (esp. lengths). Comparison repetition/common & spacy/marsatag
     
     Input:
     ---------
@@ -212,14 +235,23 @@ def folder_analysis(input_folder, marsa_folder, primes=['conversant', 'participa
                     d['prime'] = prime
                     # LILLA - add window?
                     vc = extract_pv_text(df, tier=prime)
-                    counters, prime_voc, target_voc = extract_vocab_count(vc)
+                    # output is: l, target_vocab, introduced_vocab, prime_vocab, ignored_vocab+target_vocab
+                    counters, target_voc, prime_voc, all_prime_voc, all_target_voc = extract_vocab_count(vc)
                     counters = {k:v for c in counters for k,v in c.items()}
                     lilla = len(counters) / (len(prime_voc)*len(target_voc)) # fonction existence 
                     d['lilla'] = lilla
-                    d['prime_contentw'] = len(prime_voc)
-                    d['target_contentw'] = len(target_voc)
-                    d['log_lilla'] = np.log(lilla)
-                    d['midlog_lilla'] = len(counters) / np.log(len(prime_voc)*len(target_voc))
+                    d['lilla_num'] = len(counters)
+                    d['prime_contentw_l'] = len(prime_voc)
+                    d['target_contentw_l'] = len(target_voc)
+                    d['prime_contentw'] = ' '.join(prime_voc)
+                    d['target_contentw'] = ' '.join(target_voc)
+                    d['all_prime_contentw'] = ' '.join(all_prime_voc)
+                    d['all_target_contentw'] = ' '.join(all_target_voc)
+                    d['repeated_contentw'] = ' '.join(counters.keys())
+                    d['target_introducedw'] = ' '.join(set(all_prime_voc) - set(prime_voc))
+                    d['target_introducedw_l'] = len(list(set(all_prime_voc) - set(prime_voc)))
+                    # d['log_lilla'] = np.log(lilla)
+                    # d['midlog_lilla'] = len(counters) / np.log(len(prime_voc)*len(target_voc))
                     # SILLA
                     #counters, prime_syn, target_syn = extract_syntax_count(vc)
                     #counters = {k:v for c in counters for k,v in c.items()}

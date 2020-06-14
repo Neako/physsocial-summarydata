@@ -130,9 +130,9 @@ for file in ['data/pvalues.xlsx','data/pvalues_align.xlsx']:
                     store['fixed_effect'] = '_'.join(col.split('_')[:-1]) if (re.search(':', col) is None) else 'interaction'
                 store['threshold'] = t
                 if i == 0:
-                    store['areas'] = str(list(results[results[col] <= t].index))
+                    store['areas'] = str(sorted(list(results[results[col] <= t].index)))
                 else:
-                    store['areas'] = str(list(results[(results[col] <= t) & (results[col] > thres[i-1])].index))
+                    store['areas'] = str(sorted(list(results[(results[col] <= t) & (results[col] > thres[i-1])].index)))
                 table.append(store)
         if store['feature'] in warnings.keys():
             warnings[store['feature']][store['condition']] = results['Warning'].apply(lambda x: 1 if (str(x).lower() != 'nan') else 0).sum()/results.shape[0]

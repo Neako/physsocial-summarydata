@@ -105,7 +105,7 @@ def visualise_brain(b_obj):
 def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, add_hemispheres, is_estimate=False, cmap='copper', vmin=0., vmax=0.01, save_gif=False):
     """Generate .png and .gif animation of rotating brains
     """
-    sc = SceneObj(size=(1000*(len(views)//2 + (1 if add_hemispheres else 0)), 1000*(len(views)>1)))
+    sc = SceneObj(size=(1000*(len(views)//2 + (1 if add_hemispheres else 0)), 1000*(len(views)>1)), bgcolor='black')
     KW = dict(title_size=14., zoom=2.) # zoom not working
     CBAR_STATE = dict(cbtxtsz=12, txtsz=10., width=.1, cbtxtsh=3., rect=(-.3, -2., 1., 4.))
     # PLOT OBJECTS
@@ -136,7 +136,7 @@ def generate_img(l_file, r_file, activated_areas, brain_name, out_file, views, a
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', '-d', type=str) # xlsx file
-    parser.add_argument('--file_type', '-t', choices=['pvalues', 'estimates'], type=str, default='pvalues') # if estimate, lookup pvalues
+    parser.add_argument('--file_type', '-t', choices=['pvalues', 'estimates', 'areas'], type=str, default='pvalues') # if estimate, lookup pvalues
     parser.add_argument('--feature', '-f', type=str, default=None) # which sheet? ex: sum_ipu_lgth
     parser.add_argument('--condition', '-c', choices=['part', 'conv', 'diff'], default=None)
     parser.add_argument('--on', '-on', choices=['agent', 'feature', 'interaction'], default=None) # Agent[T.R]
@@ -157,6 +157,7 @@ if __name__ == '__main__':
         features = [args.feature+'_'+args.condition]
     ons = ['agent', 'feature', 'interaction'] if args.on is None else [args.on]
     is_estimate=(args.file_type == 'estimates')
+    is_pvalues=(args.file_type == 'pvalues')
 
     for f in features:
         for on in ons:
@@ -167,7 +168,7 @@ if __name__ == '__main__':
             print(brain_areas['index'].tolist())
             print()
 
-            cmap = 'copper' if not is_estimate else 'coolwarm'
+            cmap = 'copper' if is_pvalues else ('coolwarm' if is_estimate else 'rainbow')
             v = max(abs(brain_areas['values'].min()), brain_areas['values'].max())
             vmin = -1*v if is_estimate else 0
             vmax = v if is_estimate else args.pmax
