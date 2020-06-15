@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
-import spacy as sp
+try: # if issues with spacy not being installed...
+    import spacy as sp
+except:
+    import warnings
+    warnings.warn("spacy not installed")
 
 import glob
 import os,sys,inspect
@@ -22,7 +26,7 @@ import seaborn as sns
 
 
 ########### TEXTGRID FUNCTIONS
-def extract_tier(file_name, tier_name="Transcription"):
+def extract_tier(file_name, tier_name="Transcription", return_parser=False):
     """Read file and extract tier for analysis (either left or right tier)
     
     Input:
@@ -31,10 +35,16 @@ def extract_tier(file_name, tier_name="Transcription"):
         name of file to be analysed
     tier_name: str 
         tiers to look for before using IPUs
+    return_parser: bool
+        whether to return IO parser and sppasTranscription object, default False
     
     Output:
     -----------
     tier: sppasTier
+    trs: sppasTranscription object
+        if return_parser is True
+    parser: IO parser
+        if return_parser is True
     """
     parser = spp.sppasRW(file_name)
     trs = parser.read()
@@ -42,7 +52,10 @@ def extract_tier(file_name, tier_name="Transcription"):
         tier = parser.read().find(tier_name)
     else:
         tier = parser.read().find("IPUs")
-    return tier
+    if return_parser:
+        return tier, trs, parser
+    else:
+        return tier
 
 def get_interval(sppasObject):
     """ Return the transcriped text and the IPU start/stop points for a given annotation.
@@ -95,7 +108,7 @@ def get_ipu(tier, minimum_length = 0.5):
 
 
 ###### SPACY FUNCTIONS
-def tag_one(sentence, nlp=sp.load('fr_core_news_sm')):
+def tag_one(sentence, nlp):
     """Extract POS tags for one sentence or one - aligning with MarsaTag (simplified output: no Cc nor Cs)
     
     Input:

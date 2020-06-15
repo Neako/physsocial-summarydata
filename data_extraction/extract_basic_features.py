@@ -195,7 +195,7 @@ def folder_analysis(input_folder, marsa_folder, cplx_functions,
                 data = get_ipu(trs, minimum_length)
                 if (marsa_folder is None):
                     try:
-                        p_analysis = tag_one('. '.join(data.label.values))
+                        p_analysis = tag_one('. '.join(data.label.values), nlp=sp.load('fr_core_news_sm'))
                     except:
                         print("Error with file:\t" + f)
                         
