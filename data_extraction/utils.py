@@ -193,16 +193,35 @@ def marsatag_to_pandas(document, with_inserted=True):
     sentence = []
     d = {'A': 'ADJ', 'D':'DET', 'R': 'ADV', 'V': 'VERB', 'C': 'CONJ', 'N': 'NOUN', 
          'S':'PREP', 'W':'PUNCT', 'I':'INTJ', 'P':'PRON', 'U':'X'}
+    # exceptions:
+    exceptions = ['batman', 'spiderman'] # complete with others if need be
+    # also exception: all words with 'regex_type="not_in_the_lexicon"' and containing '$' ==> 'NOUN'
     for child in document:
         if child.tag == 'token':
             # first child is solution, if exists
             try:
-                sentence.append({'form': child.attrib['form'], \
-                             'pos': d[child.attrib['features'][0]], \
-                             'lemma': None if 'lemma' not in child.attrib.keys() else child.attrib['lemma'], \
-                             'inserted': (child.attrib['regex_type'] == 'inserted') \
-                            })
-            except: # erreur de type """<token form="-" regex_type="Ponct_Wm1">"""
+                # for all words like $Avengers$ $Disney$ $Furhat$...
+                if (child.attrib['regex_type'] == "not_in_the_lexicon") and ('$' in child.attrib['form']):
+                    sentence.append({'form': child.attrib['form'].replace('$','').lower(), \
+                                'pos': 'NOUN', \
+                                'lemma': child.attrib['form'].replace('$','').lower(), \
+                                'inserted': (child.attrib['regex_type'] == 'inserted') \
+                                })
+                # for other references that aren't in $...$
+                elif (child.attrib['regex_type'] == "not_in_the_lexicon") and (child.attrib['form'] in exceptions):
+                    sentence.append({'form': child.attrib['form'], \
+                                'pos': 'NOUN', \
+                                'lemma': child.attrib['form'].replace('$','').lower(), \
+                                'inserted': (child.attrib['regex_type'] == 'inserted') \
+                                })
+                # basically every other word - won't deal with unknown words that aren't entities
+                else: 
+                    sentence.append({'form': child.attrib['form'], \
+                                'pos': d[child.attrib['features'][0]], \
+                                'lemma': None if 'lemma' not in child.attrib.keys() else child.attrib['lemma'], \
+                                'inserted': (child.attrib['regex_type'] == 'inserted') \
+                                })
+            except: # errors like """<token form="-" regex_type="Ponct_Wm1">"""
                 sentence.append({'form': child.attrib['form'], \
                              'pos': 'PUNCT', \
                              'lemma': None if 'lemma' not in child.attrib.keys() else child.attrib['lemma'], \
@@ -216,8 +235,8 @@ def marsatag_to_pandas(document, with_inserted=True):
 
 ###### OTHER RECURRENT FUNCTIONS
 # cleaning text
-patterns_dic = {' [sS]pider(.+?){0,1}man ': ' Spiderman ', 
-                ' [bB]at(.+?){0,1}man ': ' Batman ', ' \[(.+?)\] ':' ', ' (\w+-|-\w+) ':' ', "' ":"'"}
+patterns_dic = {' [sS]pider[. -]{0,1}man ': ' Spiderman ', 
+                ' [bB]at[. -]{0,1}man ': ' Batman ', ' \[(.+?)\] ':' ', ' (\w+-|-\w+) ':' ', "' ":"'"}
 
 def clean_text(text, patterns_dic):
     # remove '$'
