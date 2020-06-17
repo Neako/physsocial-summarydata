@@ -21,7 +21,11 @@ import re
 import ast
 from collections import Counter
 
-import spacy as sp
+try: # if issues with spacy not being installed...
+    import spacy as sp
+except:
+    import warnings
+    warnings.warn("spacy not installed")
 from textblob import TextBlob
 
 
